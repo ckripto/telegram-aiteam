@@ -192,6 +192,8 @@ GITHUB_API_BASE_URL
 
 `GITHUB_DEFAULT_REPO` is the current project repository. If the user does not name a repository explicitly, Assistant and Senior Python Developer must use `GITHUB_DEFAULT_REPO` as the codebase being developed, including the code that powers this agent workspace. This keeps the developer agent from asking for a repository link when the default project is already configured. An explicit `owner/repo` in a command overrides the default for that command only.
 
+When `/python_dev` is given a development task that explicitly asks to open a PR, Senior Python Developer must not stop at a plan. Assistant should execute the developer GitHub workflow: resolve `GITHUB_DEFAULT_REPO`, read the repository tree, let the developer select relevant files, fetch those files, generate full replacements, write them to a branch, and open a draft PR. If `GITHUB_DEFAULT_REPO` is a short name rather than `owner/repo`, GitHub resolution may be used when the match is unambiguous.
+
 `github.file_write`, `github.pr_open`, and `github.pr_merge` are write capabilities. Explicit `/python_pr`, `/python_change_file`, and `/python_merge_pr ... CONFIRM` commands are treated as user-requested actions. Future autonomous code changes, PR creation, or merging must go through the confirmation policy before calling GitHub.
 
 ## Future Agent: Project Agent

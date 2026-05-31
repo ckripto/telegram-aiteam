@@ -8,6 +8,8 @@ from src.agent_mvp.agent_registry import (
 )
 from src.agent_mvp.app import AgentMvpApp
 from src.agent_mvp.config import Config
+from src.agent_mvp.github_gateway import GitHubFileResult, GitHubRepoResult, GitHubTreeResult, GitHubWriteResult, PullRequestResult
+from src.agent_mvp.python_developer import RepositoryChangePlan, RepositoryFileUpdate, RepositoryFileUpdateProposal
 from src.agent_mvp.telegram import TelegramMessage
 from src.agent_mvp.weather import WeatherForecast
 
@@ -169,6 +171,36 @@ class DelegationTest(unittest.TestCase):
             self.assertIn("ckripto/telegram-aiteam", task)
             self.assertIn("current codebase", task)
 
+    def test_python_developer_pr_task_opens_pr_through_github_workflow(self) -> None:
+        with tempfile.NamedTemporaryFile() as tmp:
+            config = test_config(tmp.name, github_default_repo="telegram-aiteam")
+            config = Config(
+                **{
+                    **config.__dict__,
+                    "github_token": "token",
+                    "python_developer_api_key": "developer-token",
+                    "python_developer_model": "developer-model",
+                }
+            )
+            app = AgentMvpApp(config)
+            telegram = FakeTelegram()
+            app.telegram = telegram
+            app.github = FakeGitHub()
+            app.python_developer = FakePythonDeveloper()
+
+            app.delegate_python_developer_to_chat(
+                chat_id=100,
+                text="Добавить фитчу: сообщения должны быть размечены в markdown. Открыть PR в репозиторий.",
+                request_id="req",
+                conversation_id="conv",
+            )
+
+            joined = "\n".join(telegram.messages)
+            self.assertIn("[Senior Python Developer -> GitHub] Запрашиваю репозиторий по умолчанию: telegram-aiteam.", joined)
+            self.assertIn("[GitHub -> Senior Python Developer] Текущий проект: ckripto/telegram-aiteam", joined)
+            self.assertIn("[GitHub -> Assistant] Pull request created: https://github.com/ckripto/telegram-aiteam/pull/7", joined)
+            self.assertIn("[Assistant] Senior Python Developer открыл draft PR", joined)
+
 
 class FakeTelegram:
     def __init__(self) -> None:
@@ -199,6 +231,93 @@ class FakeWeather:
             precipitation_probability=20,
             summary="Сейчас 10°C, ветер 5 км/ч. Сегодня ожидается от 8°C до 12°C, вероятность осадков до 20%.",
         )
+
+
+class FakeGitHub:
+    def __init__(self) -> None:
+        self.writes: list[tuple[str, str]] = []
+
+    def get_repository(self, repo: str) -> GitHubRepoResult:
+        return GitHubRepoResult(
+            ok=True,
+            message="ok",
+            repo="ckripto/telegram-aiteam",
+            default_branch="main",
+        )
+
+    def list_files(self, repo: str, ref: str) -> GitHubTreeResult:
+        return GitHubTreeResult(ok=True, message="ok", files=("src/agent_mvp/telegram.py", "README.md"))
+
+    def get_file(self, repo: str, path: str, ref: str) -> GitHubFileResult:
+        return GitHubFileResult(ok=True, message="ok", path=path, content="old", sha="sha")
+
+    def create_or_update_file_on_branch(
+        self,
+        repo: str,
+        base_branch: str,
+        branch: str,
+        path: str,
+        content: str,
+        message: str,
+    ) -> GitHubWriteResult:
+        self.writes.append((path, content))
+        return GitHubWriteResult(ok=True, message="updated")
+
+    def create_pull_request(
+        self,
+        repo: str,
+        head: str,
+        base: str,
+        title: str,
+        body: str,
+        draft: bool = True,
+    ) -> PullRequestResult:
+        return PullRequestResult(
+            ok=True,
+            message="Pull request created: https://github.com/ckripto/telegram-aiteam/pull/7",
+            url="https://github.com/ckripto/telegram-aiteam/pull/7",
+        )
+
+
+class FakePythonDeveloper:
+    def plan_repository_change(
+        self,
+        task: str,
+        repo: str,
+        default_branch: str,
+        files: tuple[str, ...],
+    ) -> RepositoryChangePlan:
+        return RepositoryChangePlan(
+            ok=True,
+            message="ok",
+            title="Add Markdown Telegram messages",
+            branch="codex/telegram-markdown",
+            base="main",
+            files=("src/agent_mvp/telegram.py",),
+            summary="Plan",
+        )
+
+    def propose_repository_file_updates(
+        self,
+        task: str,
+        repo: str,
+        files: dict[str, str],
+    ) -> RepositoryFileUpdateProposal:
+        return RepositoryFileUpdateProposal(
+            ok=True,
+            message="ok",
+            updates=(
+                RepositoryFileUpdate(
+                    path="src/agent_mvp/telegram.py",
+                    content="new",
+                    summary="Update Telegram formatting.",
+                ),
+            ),
+            summary="Summary",
+        )
+
+    def respond(self, task: str):  # pragma: no cover - this workflow should not call respond.
+        raise AssertionError("respond should not be called for PR tasks")
 
 
 if __name__ == "__main__":

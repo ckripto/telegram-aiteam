@@ -7,6 +7,9 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+TELEGRAM_MESSAGE_LIMIT = 4096
+SAFE_MESSAGE_LIMIT = 3900
+
 
 @dataclass(frozen=True)
 class TelegramMessage:
@@ -74,15 +77,40 @@ class TelegramClient:
         text: str,
         reply_to_message_id: int | None = None,
     ) -> int:
-        payload: dict[str, Any] = {
-            "chat_id": chat_id,
-            "text": text,
-            "disable_web_page_preview": True,
-        }
-        if reply_to_message_id is not None:
-            payload["reply_parameters"] = {"message_id": reply_to_message_id}
-        result = self._request("sendMessage", payload)["result"]
-        return int(result["message_id"])
+        message_id = 0
+        for chunk in split_telegram_message(text):
+            payload: dict[str, Any] = {
+                "chat_id": chat_id,
+                "text": chunk,
+                "disable_web_page_preview": True,
+            }
+            if reply_to_message_id is not None:
+                payload["reply_parameters"] = {"message_id": reply_to_message_id}
+            result = self._request("sendMessage", payload)["result"]
+            message_id = int(result["message_id"])
+            reply_to_message_id = None
+        return message_id
+
+
+def split_telegram_message(text: str, limit: int = SAFE_MESSAGE_LIMIT) -> list[str]:
+    if len(text) <= limit:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text
+    while len(remaining) > limit:
+        split_at = remaining.rfind("\n", 0, limit)
+        if split_at < limit // 2:
+            split_at = remaining.rfind(" ", 0, limit)
+        if split_at < limit // 2:
+            split_at = limit
+        chunk = remaining[:split_at].rstrip()
+        if chunk:
+            chunks.append(chunk)
+        remaining = remaining[split_at:].lstrip()
+    if remaining:
+        chunks.append(remaining)
+    return chunks
 
 
 def parse_message(update: dict[str, Any]) -> TelegramMessage | None:
@@ -104,4 +132,3 @@ def parse_message(update: dict[str, Any]) -> TelegramMessage | None:
         username=user.get("username"),
         first_name=user.get("first_name"),
     )
-

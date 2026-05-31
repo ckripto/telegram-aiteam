@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -40,6 +41,32 @@ class FileUpdateProposal:
     ok: bool
     message: str
     content: str | None = None
+    summary: str | None = None
+
+
+@dataclass(frozen=True)
+class RepositoryChangePlan:
+    ok: bool
+    message: str
+    title: str | None = None
+    branch: str | None = None
+    base: str | None = None
+    files: tuple[str, ...] = ()
+    summary: str | None = None
+
+
+@dataclass(frozen=True)
+class RepositoryFileUpdate:
+    path: str
+    content: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class RepositoryFileUpdateProposal:
+    ok: bool
+    message: str
+    updates: tuple[RepositoryFileUpdate, ...] = ()
     summary: str | None = None
 
 
@@ -89,6 +116,136 @@ class SeniorPythonDeveloperRuntime:
         if not isinstance(summary, str):
             summary = "Automated file update."
         return FileUpdateProposal(ok=True, message="Prepared file update.", content=content, summary=summary)
+
+    def plan_repository_change(
+        self,
+        task: str,
+        repo: str,
+        default_branch: str,
+        files: tuple[str, ...],
+    ) -> RepositoryChangePlan:
+        if not self.config.python_developer_enabled:
+            return RepositoryChangePlan(
+                ok=False,
+                message="PYTHON_DEVELOPER_API_KEY and PYTHON_DEVELOPER_MODEL are required to plan repository changes.",
+            )
+
+        prompt = (
+            "You are planning a small repository change that will be opened as a draft GitHub PR.\n"
+            "Return JSON only with keys: `title`, `branch`, `base`, `files`, and `summary`.\n"
+            "`files` must contain 1-6 existing paths from the repository tree below that should be edited.\n"
+            "`branch` must be a short safe branch name using letters, numbers, dashes, slashes, or underscores.\n"
+            "Do not ask for a repository link; the repository below is the current project.\n\n"
+            f"Repository: {repo}\n"
+            f"Default base branch: {default_branch}\n"
+            f"Task: {task}\n\n"
+            "Repository files:\n"
+            "```text\n"
+            f"{chr(10).join(files[:600])}\n"
+            "```"
+        )
+        reply = self._respond_with_model(prompt)
+        try:
+            parsed = json.loads(reply.text)
+        except json.JSONDecodeError:
+            return RepositoryChangePlan(ok=False, message="Model did not return valid JSON for repository plan.")
+
+        title = parsed.get("title")
+        branch = parsed.get("branch")
+        base = parsed.get("base") or default_branch
+        selected_files = parsed.get("files")
+        summary = parsed.get("summary")
+        if not isinstance(title, str) or not title.strip():
+            return RepositoryChangePlan(ok=False, message="Repository plan did not include a non-empty `title`.")
+        if not isinstance(branch, str) or not branch.strip():
+            return RepositoryChangePlan(ok=False, message="Repository plan did not include a non-empty `branch`.")
+        if not re.fullmatch(r"[A-Za-z0-9._/-]+", branch.strip()):
+            return RepositoryChangePlan(ok=False, message="Repository plan returned an unsafe branch name.")
+        if not isinstance(base, str) or not base.strip():
+            return RepositoryChangePlan(ok=False, message="Repository plan did not include a non-empty `base`.")
+        if not isinstance(selected_files, list):
+            return RepositoryChangePlan(ok=False, message="Repository plan did not include `files`.")
+
+        known_files = set(files)
+        normalized_files: list[str] = []
+        for path in selected_files:
+            if isinstance(path, str) and path in known_files and path not in normalized_files:
+                normalized_files.append(path)
+        if not normalized_files:
+            return RepositoryChangePlan(ok=False, message="Repository plan did not select existing files.")
+        if not isinstance(summary, str):
+            summary = "Automated repository change."
+        return RepositoryChangePlan(
+            ok=True,
+            message="Prepared repository change plan.",
+            title=title.strip(),
+            branch=branch.strip(),
+            base=base.strip(),
+            files=tuple(normalized_files[:6]),
+            summary=summary.strip(),
+        )
+
+    def propose_repository_file_updates(
+        self,
+        task: str,
+        repo: str,
+        files: dict[str, str],
+    ) -> RepositoryFileUpdateProposal:
+        if not self.config.python_developer_enabled:
+            return RepositoryFileUpdateProposal(
+                ok=False,
+                message="PYTHON_DEVELOPER_API_KEY and PYTHON_DEVELOPER_MODEL are required to generate repository changes.",
+            )
+
+        file_blocks = []
+        for path, content in files.items():
+            file_blocks.append(f"Path: {path}\n```text\n{content}\n```")
+        prompt = (
+            "You are editing repository files for a draft GitHub PR.\n"
+            "Return JSON only with keys `updates` and `summary`.\n"
+            "`updates` must be an array of objects with keys `path`, `content`, and `summary`.\n"
+            "`content` must be the complete replacement content for that file, not a patch.\n"
+            "Only include files that need changes; paths must match the provided files exactly.\n\n"
+            f"Repository: {repo}\n"
+            f"Task: {task}\n\n"
+            "Files:\n"
+            f"{chr(10).join(file_blocks)}"
+        )
+        reply = self._respond_with_model(prompt)
+        try:
+            parsed = json.loads(reply.text)
+        except json.JSONDecodeError:
+            return RepositoryFileUpdateProposal(ok=False, message="Model did not return valid JSON for repository updates.")
+
+        raw_updates = parsed.get("updates")
+        summary = parsed.get("summary")
+        if not isinstance(raw_updates, list):
+            return RepositoryFileUpdateProposal(ok=False, message="Repository update response did not include `updates`.")
+        allowed_paths = set(files)
+        updates: list[RepositoryFileUpdate] = []
+        for item in raw_updates:
+            if not isinstance(item, dict):
+                continue
+            path = item.get("path")
+            content = item.get("content")
+            item_summary = item.get("summary")
+            if not isinstance(path, str) or path not in allowed_paths:
+                continue
+            if not isinstance(content, str) or not content:
+                continue
+            if not isinstance(item_summary, str):
+                item_summary = f"Updated {path}."
+            updates.append(RepositoryFileUpdate(path=path, content=content, summary=item_summary))
+        if not updates:
+            return RepositoryFileUpdateProposal(ok=False, message="Repository update response did not include valid file updates.")
+        if not isinstance(summary, str):
+            summary = "\n".join(f"- {update.summary}" for update in updates)
+        return RepositoryFileUpdateProposal(
+            ok=True,
+            message="Prepared repository file updates.",
+            updates=tuple(updates),
+            summary=summary,
+        )
 
     def _respond_with_model(self, task: str) -> PythonDeveloperReply:
         assert self.config.python_developer_api_key is not None

@@ -152,6 +152,23 @@ Specialist agents may use their own model credentials. The Telegram protocol doe
 
 Opening a PR is a write action. Explicit `/python_pr` commands can execute immediately; autonomous PR creation should request confirmation first. If the command omits `repo`, GitHub uses `GITHUB_DEFAULT_REPO` as the current project codebase.
 
+### Developer Task To PR
+
+```text
+[User] /python_dev Добавить фитчу: сообщения в Telegram должны быть размечены в markdown. Открыть PR в репозиторий.
+[Assistant -> Senior Python Developer] Default GitHub repository/current project: telegram-aiteam.
+[Senior Python Developer -> GitHub] Запрашиваю репозиторий по умолчанию: telegram-aiteam.
+[GitHub -> Senior Python Developer] Текущий проект: ckripto/telegram-aiteam, base branch: main.
+[Senior Python Developer -> GitHub] Для PR прочитаю файлы:
+- src/agent_mvp/telegram.py
+- src/agent_mvp/app.py
+[Senior Python Developer -> Assistant] Подготовил изменения для ветки codex/telegram-markdown.
+[GitHub -> Assistant] Pull request created: https://github.com/ckripto/telegram-aiteam/pull/13
+[Assistant] Senior Python Developer открыл draft PR: https://github.com/ckripto/telegram-aiteam/pull/13
+```
+
+This flow is for explicit PR requests in developer tasks. The visible Telegram conversation must show Assistant, Senior Python Developer, and GitHub steps so the user can audit what happened.
+
 ### GitHub Code Change
 
 ```text
@@ -174,6 +191,10 @@ Opening a PR is a write action. Explicit `/python_pr` commands can execute immed
 ```
 
 Merging requires the explicit command and literal `CONFIRM`. The assistant must not merge a PR from an indirect or ambiguous natural-language instruction.
+
+### Long Messages
+
+Telegram rejects messages over its length limit. The Telegram client splits outgoing text into safe chunks before calling `sendMessage`; the first chunk may reply to the original message, and following chunks are sent as continuation messages.
 
 ### Planner Reminder
 

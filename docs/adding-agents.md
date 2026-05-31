@@ -321,3 +321,5 @@ Purpose:
 - use `GITHUB_DEFAULT_REPO` as the current project codebase when the user does not provide an explicit `owner/repo`.
 
 When adding another code-capable agent, document how it receives the current project. The default rule is: omitted repository means `GITHUB_DEFAULT_REPO`, and that repository is the software project currently being developed, including this agent workspace unless the user explicitly switches projects.
+
+If a code-capable agent accepts natural-language development tasks, define whether an explicit PR request should trigger execution. For Senior Python Developer, a task that asks to open a PR must run the GitHub workflow and produce a draft PR instead of only returning a plan.

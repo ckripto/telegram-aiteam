@@ -630,6 +630,14 @@ class AgentWorkspaceApp:
             text="[Senior Python Developer] Принял задачу. Подготовлю технический ответ.",
             agent_id=SENIOR_PYTHON_DEVELOPER_ID,
         )
+        if self.try_handle_developer_pr_task(
+            chat_id=chat_id,
+            task=task_for_developer,
+            user_task=task,
+            request_id=request_id,
+            conversation_id=conversation_id,
+        ):
+            return
         reply = self.python_developer.respond(task_for_developer)
         self.store.append(
             Event.create(
@@ -1083,6 +1091,217 @@ class AgentWorkspaceApp:
             "as the current codebase, including the code that powers this agent workspace.\n\n"
             f"Task: {task}"
         )
+
+    def should_open_pr_from_developer_task(self, task: str) -> bool:
+        lowered = task.lower()
+        has_pr_marker = bool(
+            re.search(r"(?<![a-zа-я0-9])pr(?![a-zа-я0-9])", lowered)
+            or re.search(r"(?<![a-zа-я0-9])пр(?![a-zа-я0-9])", lowered)
+            or any(marker in lowered for marker in ("pull request", "пулл реквест", "пул-реквест", "пулл-реквест"))
+        )
+        action_markers = ("откры", "созда", "сдела", "подготов", "open", "create")
+        return has_pr_marker and any(marker in lowered for marker in action_markers)
+
+    def try_handle_developer_pr_task(
+        self,
+        chat_id: int,
+        task: str,
+        user_task: str,
+        request_id: str,
+        conversation_id: str,
+    ) -> bool:
+        if not self.should_open_pr_from_developer_task(user_task):
+            return False
+
+        repo = self.config.github_default_repo or ""
+        if not repo:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text="[Senior Python Developer -> Assistant] Не могу открыть PR: не настроен GITHUB_DEFAULT_REPO.",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+        if not self.config.github_enabled:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text="[Senior Python Developer -> Assistant] Не могу открыть PR: не настроен GITHUB_TOKEN.",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+        if not self.config.python_developer_enabled:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text="[Senior Python Developer -> Assistant] Не могу подготовить изменения: не настроены PYTHON_DEVELOPER_API_KEY и PYTHON_DEVELOPER_MODEL.",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+
+        self.emit_agent_message(
+            chat_id=chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Senior Python Developer -> GitHub] Запрашиваю репозиторий по умолчанию: {repo}.",
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        repo_result = self.github.get_repository(repo)
+        if not repo_result.ok or not repo_result.repo or not repo_result.default_branch:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[GitHub -> Senior Python Developer] Не удалось получить репозиторий: {repo_result.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+        resolved_repo = repo_result.repo
+        base = repo_result.default_branch
+
+        self.emit_agent_message(
+            chat_id=chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[GitHub -> Senior Python Developer] Текущий проект: {resolved_repo}, base branch: {base}.",
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        tree_result = self.github.list_files(resolved_repo, base)
+        if not tree_result.ok:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[GitHub -> Senior Python Developer] Не удалось прочитать дерево файлов: {tree_result.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+
+        self.emit_agent_message(
+            chat_id=chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Senior Python Developer] Изучу дерево проекта ({len(tree_result.files)} файлов) и выберу файлы для изменения.",
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        plan = self.python_developer.plan_repository_change(
+            task=task,
+            repo=resolved_repo,
+            default_branch=base,
+            files=tree_result.files,
+        )
+        if not plan.ok or not plan.title or not plan.branch or not plan.base or not plan.files:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[Senior Python Developer -> Assistant] Не смог спланировать PR: {plan.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+
+        self.emit_agent_message(
+            chat_id=chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=(
+                "[Senior Python Developer -> GitHub] Для PR прочитаю файлы:\n"
+                + "\n".join(f"- {path}" for path in plan.files)
+            ),
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        file_contents: dict[str, str] = {}
+        for path in plan.files:
+            file_result = self.github.get_file(resolved_repo, path, plan.base)
+            if not file_result.ok or file_result.content is None:
+                self.emit_agent_message(
+                    chat_id=chat_id,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    text=f"[GitHub -> Senior Python Developer] Не удалось прочитать {path}: {file_result.message}",
+                    agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+                )
+                return True
+            file_contents[path] = file_result.content
+
+        proposal = self.python_developer.propose_repository_file_updates(
+            task=task,
+            repo=resolved_repo,
+            files=file_contents,
+        )
+        if not proposal.ok:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[Senior Python Developer -> Assistant] Не смог подготовить изменения: {proposal.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+
+        self.emit_agent_message(
+            chat_id=chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Senior Python Developer -> Assistant] Подготовил изменения для ветки {plan.branch}.",
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        for update in proposal.updates:
+            write_result = self.github.create_or_update_file_on_branch(
+                repo=resolved_repo,
+                base_branch=plan.base,
+                branch=plan.branch,
+                path=update.path,
+                content=update.content,
+                message=f"Update {update.path}",
+            )
+            if not write_result.ok:
+                self.emit_agent_message(
+                    chat_id=chat_id,
+                    request_id=request_id,
+                    conversation_id=conversation_id,
+                    text=f"[GitHub -> Senior Python Developer] Не удалось записать {update.path}: {write_result.message}",
+                    agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+                )
+                return True
+
+        body = proposal.summary or plan.summary or "Automated repository change."
+        pr_result = self.github.create_pull_request(
+            repo=resolved_repo,
+            head=plan.branch,
+            base=plan.base,
+            title=plan.title,
+            body=body,
+            draft=True,
+        )
+        if not pr_result.ok:
+            self.emit_agent_message(
+                chat_id=chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[GitHub -> Senior Python Developer] Изменения записаны, но PR открыть не удалось: {pr_result.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return True
+
+        self.emit_agent_message(
+            chat_id=chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[GitHub -> Assistant] Pull request created: {pr_result.url}",
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        self.emit_agent_message(
+            chat_id=chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Assistant] Senior Python Developer открыл draft PR: {pr_result.url}",
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
+        return True
 
     def parse_python_pr_command(self, text: str) -> tuple[str, str, str, str] | None:
         full_parts = text.strip().split(maxsplit=4)

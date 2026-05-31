@@ -35,16 +35,32 @@ class GitHubWriteResult:
     sha: str | None = None
 
 
+@dataclass(frozen=True)
+class GitHubRepoResult:
+    ok: bool
+    message: str
+    repo: str | None = None
+    default_branch: str | None = None
+
+
+@dataclass(frozen=True)
+class GitHubTreeResult:
+    ok: bool
+    message: str
+    files: tuple[str, ...] = ()
+
+
 class GitHubGateway:
     def __init__(self, config: Config) -> None:
         self.config = config
 
     def get_file(self, repo: str, path: str, ref: str) -> GitHubFileResult:
-        normalized_repo = self._normalize_repo(repo)
         if not self.config.github_enabled:
             return GitHubFileResult(ok=False, message="GitHub capability is not configured. Set GITHUB_TOKEN in .env.")
-        if not normalized_repo:
-            return GitHubFileResult(ok=False, message="Repository is required. Use owner/name or set GITHUB_DEFAULT_REPO.")
+        repo_result = self.resolve_repository(repo)
+        if not repo_result.ok or not repo_result.repo:
+            return GitHubFileResult(ok=False, message=repo_result.message)
+        normalized_repo = repo_result.repo
 
         quoted_path = "/".join(urllib.parse.quote(part) for part in path.split("/"))
         result = self._request_json(
@@ -77,11 +93,12 @@ class GitHubGateway:
         content: str,
         message: str,
     ) -> GitHubWriteResult:
-        normalized_repo = self._normalize_repo(repo)
         if not self.config.github_enabled:
             return GitHubWriteResult(ok=False, message="GitHub capability is not configured. Set GITHUB_TOKEN in .env.")
-        if not normalized_repo:
-            return GitHubWriteResult(ok=False, message="Repository is required. Use owner/name or set GITHUB_DEFAULT_REPO.")
+        repo_result = self.resolve_repository(repo)
+        if not repo_result.ok or not repo_result.repo:
+            return GitHubWriteResult(ok=False, message=repo_result.message)
+        normalized_repo = repo_result.repo
 
         branch_result = self.ensure_branch(normalized_repo, branch, base_branch)
         if not branch_result.ok:
@@ -109,6 +126,97 @@ class GitHubGateway:
             message=f"Updated {path} on {branch}.",
             url=content_info.get("html_url"),
             sha=commit.get("sha"),
+        )
+
+    def get_repository(self, repo: str) -> GitHubRepoResult:
+        if not self.config.github_enabled:
+            return GitHubRepoResult(ok=False, message="GitHub capability is not configured. Set GITHUB_TOKEN in .env.")
+        repo_result = self.resolve_repository(repo)
+        if not repo_result.ok or not repo_result.repo:
+            return repo_result
+        normalized_repo = repo_result.repo
+
+        result = self._request_json("GET", f"/repos/{normalized_repo}")
+        if not result["ok"]:
+            return GitHubRepoResult(ok=False, message=result["message"])
+        default_branch = result["data"].get("default_branch")
+        if not isinstance(default_branch, str) or not default_branch:
+            return GitHubRepoResult(ok=False, message=f"Repository has no default branch: {normalized_repo}")
+        return GitHubRepoResult(
+            ok=True,
+            message=f"Repository default branch is {default_branch}.",
+            repo=normalized_repo,
+            default_branch=default_branch,
+        )
+
+    def resolve_repository(self, repo: str) -> GitHubRepoResult:
+        normalized_repo = self._normalize_repo(repo)
+        if not normalized_repo:
+            return GitHubRepoResult(ok=False, message="Repository is required. Use owner/name or set GITHUB_DEFAULT_REPO.")
+        if "/" in normalized_repo:
+            return GitHubRepoResult(ok=True, message=f"Repository resolved: {normalized_repo}.", repo=normalized_repo)
+
+        query = urllib.parse.quote(f"{normalized_repo} in:name")
+        result = self._request_json("GET", f"/search/repositories?q={query}&per_page=10")
+        if not result["ok"]:
+            return GitHubRepoResult(ok=False, message=f"Cannot resolve repository {normalized_repo}: {result['message']}")
+        matches = []
+        for item in result["data"].get("items", []):
+            if item.get("name") == normalized_repo and isinstance(item.get("full_name"), str):
+                matches.append(item["full_name"])
+        if len(matches) == 1:
+            return GitHubRepoResult(ok=True, message=f"Repository resolved: {matches[0]}.", repo=matches[0])
+        if len(matches) > 1:
+            return GitHubRepoResult(
+                ok=False,
+                message=(
+                    f"Repository name {normalized_repo} is ambiguous. "
+                    f"Use one of: {', '.join(matches[:5])}."
+                ),
+            )
+        return GitHubRepoResult(
+            ok=False,
+            message=f"Repository {normalized_repo} was not found. Set GITHUB_DEFAULT_REPO as owner/name.",
+        )
+
+    def list_files(self, repo: str, ref: str, max_files: int = 600) -> GitHubTreeResult:
+        if not self.config.github_enabled:
+            return GitHubTreeResult(ok=False, message="GitHub capability is not configured. Set GITHUB_TOKEN in .env.")
+        repo_result = self.resolve_repository(repo)
+        if not repo_result.ok or not repo_result.repo:
+            return GitHubTreeResult(ok=False, message=repo_result.message)
+        normalized_repo = repo_result.repo
+
+        branch = self._request_json("GET", f"/repos/{normalized_repo}/git/ref/heads/{urllib.parse.quote(ref)}")
+        if not branch["ok"]:
+            return GitHubTreeResult(ok=False, message=f"Cannot read ref {ref}: {branch['message']}")
+        commit_sha = branch["data"].get("object", {}).get("sha")
+        if not commit_sha:
+            return GitHubTreeResult(ok=False, message=f"Ref has no commit SHA: {ref}")
+
+        commit = self._request_json("GET", f"/repos/{normalized_repo}/git/commits/{commit_sha}")
+        if not commit["ok"]:
+            return GitHubTreeResult(ok=False, message=f"Cannot read commit {commit_sha}: {commit['message']}")
+        tree_sha = commit["data"].get("tree", {}).get("sha")
+        if not tree_sha:
+            return GitHubTreeResult(ok=False, message=f"Commit has no tree SHA: {commit_sha}")
+
+        tree = self._request_json("GET", f"/repos/{normalized_repo}/git/trees/{tree_sha}?recursive=1")
+        if not tree["ok"]:
+            return GitHubTreeResult(ok=False, message=tree["message"])
+        files: list[str] = []
+        for item in tree["data"].get("tree", []):
+            if item.get("type") != "blob":
+                continue
+            path = item.get("path")
+            if isinstance(path, str):
+                files.append(path)
+            if len(files) >= max_files:
+                break
+        return GitHubTreeResult(
+            ok=True,
+            message=f"Read {len(files)} files from {normalized_repo}@{ref}.",
+            files=tuple(files),
         )
 
     def ensure_branch(self, repo: str, branch: str, base_branch: str) -> GitHubWriteResult:
@@ -139,11 +247,12 @@ class GitHubGateway:
         pull_number: int,
         merge_method: str = "squash",
     ) -> GitHubWriteResult:
-        normalized_repo = self._normalize_repo(repo)
         if not self.config.github_enabled:
             return GitHubWriteResult(ok=False, message="GitHub capability is not configured. Set GITHUB_TOKEN in .env.")
-        if not normalized_repo:
-            return GitHubWriteResult(ok=False, message="Repository is required. Use owner/name or set GITHUB_DEFAULT_REPO.")
+        repo_result = self.resolve_repository(repo)
+        if not repo_result.ok or not repo_result.repo:
+            return GitHubWriteResult(ok=False, message=repo_result.message)
+        normalized_repo = repo_result.repo
 
         result = self._request_json(
             "PUT",
@@ -174,12 +283,13 @@ class GitHubGateway:
                 message="GitHub capability is not configured. Set GITHUB_TOKEN in .env.",
             )
 
-        normalized_repo = self._normalize_repo(repo)
-        if not normalized_repo:
+        repo_result = self.resolve_repository(repo)
+        if not repo_result.ok or not repo_result.repo:
             return PullRequestResult(
                 ok=False,
-                message="Repository is required. Use owner/name or set GITHUB_DEFAULT_REPO.",
+                message=repo_result.message,
             )
+        normalized_repo = repo_result.repo
 
         payload = {
             "title": title,

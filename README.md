@@ -135,7 +135,11 @@ Senior Python Developer can also use GitHub capabilities when `GITHUB_TOKEN` is 
 
 When `repo` is omitted, the GitHub gateway uses `GITHUB_DEFAULT_REPO`. Treat this value as the current project repository: it is the codebase being developed, including the Telegram AI team itself. Commands may still pass an explicit `owner/repo` to work with another repository.
 
+If `/python_dev` receives a development task that explicitly asks to open a PR, Assistant runs the developer GitHub workflow instead of returning only advice: resolve the default repo, read the file tree, ask Senior Python Developer to choose files, generate full-file replacements, write a branch, and open a draft PR. `GITHUB_DEFAULT_REPO` may be `owner/repo`; a short repository name is resolved through GitHub when it is unambiguous.
+
 `/python_change_file` creates or reuses the requested branch, writes the generated full-file replacement there, and opens a draft PR. `/python_merge_pr` is intentionally strict and requires the literal `CONFIRM`.
+
+Telegram messages are split before sending so each chunk stays below Telegram's message length limit.
 
 ## Project Structure
 
