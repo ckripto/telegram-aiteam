@@ -148,12 +148,15 @@ Responsibilities:
 - design Python backend components;
 - debug Python issues;
 - explain Python tradeoffs;
+- prepare GitHub pull request descriptions;
+- open draft GitHub pull requests through the GitHub gateway when explicitly requested;
 - return technical output to Assistant for the final user-facing summary.
 
 Current command:
 
 ```text
 /python_dev <task>
+/python_pr <repo> <head> <base> <title>
 ```
 
 Current capabilities:
@@ -163,6 +166,8 @@ python.code_review
 python.design
 python.debug
 python.explain
+github.repo_read
+github.pr_open
 ```
 
 Dedicated model configuration:
@@ -171,7 +176,12 @@ Dedicated model configuration:
 PYTHON_DEVELOPER_API_KEY
 PYTHON_DEVELOPER_MODEL
 PYTHON_DEVELOPER_BASE_URL
+GITHUB_TOKEN
+GITHUB_DEFAULT_REPO
+GITHUB_API_BASE_URL
 ```
+
+`github.pr_open` is a write capability. Explicit `/python_pr` commands are treated as user-requested actions. Future autonomous PR creation must go through the confirmation policy before calling GitHub.
 
 ## Future Agent: Project Agent
 

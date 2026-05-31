@@ -40,6 +40,9 @@ OPENAI_MODEL=...
 PYTHON_DEVELOPER_API_KEY=...
 PYTHON_DEVELOPER_MODEL=...
 PYTHON_DEVELOPER_BASE_URL=https://api.openai.com/v1
+GITHUB_TOKEN=...
+GITHUB_DEFAULT_REPO=ckripto/telegram-aiteam
+GITHUB_API_BASE_URL=https://api.github.com
 LOCAL_TIMEZONE=Europe/Moscow
 WEATHER_DEFAULT_LOCATION=Moscow
 ```
@@ -61,6 +64,7 @@ python3 -m src.agent_mvp
 - `/remind <time> <text>` - ask the planner to remind you in Telegram.
 - `/reminders` - list pending reminders for the group.
 - `/python_dev <task>` - delegate to Senior Python Developer.
+- `/python_pr <repo> <head> <base> <title>` - ask Senior Python Developer to prepare a PR body and open a draft GitHub PR.
 - `/prompt_for_agent <role>: <task>` - ask the assistant to prepare a prompt for a future agent.
 
 Reminder examples:
@@ -116,6 +120,14 @@ PYTHON_DEVELOPER_API_KEY
 PYTHON_DEVELOPER_MODEL
 PYTHON_DEVELOPER_BASE_URL
 ```
+
+Senior Python Developer can also use GitHub capabilities when `GITHUB_TOKEN` is configured:
+
+```text
+/python_pr ckripto/telegram-aiteam feature-branch main Add GitHub skill
+```
+
+This creates a draft PR from an existing pushed branch. It does not create commits or push branches by itself.
 
 ## Project Structure
 

@@ -17,6 +17,7 @@ from .agent_registry import (
 from .assistant import AssistantRuntime
 from .config import Config, load_config
 from .events import Event, new_id, utc_now
+from .github_gateway import GitHubGateway
 from .mcp_stub import McpGatewayStub
 from .python_developer import SeniorPythonDeveloperRuntime
 from .reminders import ReminderParser
@@ -32,6 +33,7 @@ class AgentWorkspaceApp:
         self.store = EventStore(config.database_path)
         self.assistant = AssistantRuntime(config)
         self.python_developer = SeniorPythonDeveloperRuntime(config)
+        self.github = GitHubGateway(config)
         self.mcp = McpGatewayStub()
         self.weather = WeatherService()
         self.reminder_parser = ReminderParser(config.local_timezone)
@@ -47,6 +49,7 @@ class AgentWorkspaceApp:
         print(f"Database: {self.config.database_path}", flush=True)
         print(f"OpenAI enabled: {self.config.openai_enabled}", flush=True)
         print(f"Senior Python Developer enabled: {self.config.python_developer_enabled}", flush=True)
+        print(f"GitHub enabled: {self.config.github_enabled}", flush=True)
 
         while self._running:
             try:
@@ -180,11 +183,13 @@ class AgentWorkspaceApp:
                     "/remind <время> <текст> - попросить планировщика напомнить\n"
                     "/reminders - показать ближайшие напоминания\n"
                     "/python_dev <задача> - делегировать Senior Python Developer\n"
+                    "/python_pr <repo> <head> <base> <title> - открыть draft PR через Senior Python Developer\n"
                     "/prompt_for_agent <role>: <task> - подготовить промпт для будущего агента\n\n"
                     "Примеры:\n"
                     "/weather Moscow\n"
                     "/remind через 10 минут проверить сборку\n"
                     "/python_dev спроектируй FastAPI endpoint для задач\n"
+                    "/python_pr ckripto/telegram-aiteam feature-branch main Добавить GitHub skill\n"
                     "/remind завтра 09:30 написать план дня"
                 ),
                 reply_to_message_id=message.message_id,
@@ -213,6 +218,7 @@ class AgentWorkspaceApp:
                     f"- chat_id: {message.chat_id}\n"
                     f"- OpenAI runtime: {openai_status}\n"
                     f"- Senior Python Developer runtime: {'enabled' if self.config.python_developer_enabled else 'offline fallback'}\n"
+                    f"- GitHub capability: {'enabled' if self.config.github_enabled else 'not configured'}\n"
                     f"- event log: {self.store.count_events()} events\n"
                     f"- timezone: {self.config.local_timezone}\n"
                     f"- weather default: {self.config.weather_default_location}\n"
@@ -241,7 +247,124 @@ class AgentWorkspaceApp:
             self.delegate_python_developer_from_assistant(message, text, request_id, conversation_id)
             return True
 
+        if command == "/python_pr":
+            self.handle_python_pull_request(message, text, request_id, conversation_id)
+            return True
+
         return False
+
+    def handle_python_pull_request(
+        self,
+        message: TelegramMessage,
+        text: str,
+        request_id: str,
+        conversation_id: str,
+    ) -> None:
+        parsed = self.parse_python_pr_command(text)
+        if parsed is None:
+            self.emit_agent_message(
+                chat_id=message.chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=(
+                    "[Assistant] Формат команды:\n"
+                    "/python_pr <repo> <head> <base> <title>\n"
+                    "Пример: /python_pr ckripto/telegram-aiteam feature-branch main Добавить GitHub skill"
+                ),
+                reply_to_message_id=message.message_id,
+                agent_id=PERSONAL_ASSISTANT_ID,
+            )
+            return
+
+        repo, head, base, title = parsed
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text="[Assistant] Делегирую Senior Python Developer подготовку PR description.",
+            reply_to_message_id=message.message_id,
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
+        self.emit_delegation_event(
+            from_agent_id=PERSONAL_ASSISTANT_ID,
+            to_agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            task=f"Prepare GitHub PR body for {repo}: {title}",
+            request_id=request_id,
+            conversation_id=conversation_id,
+            chat_id=message.chat_id,
+        )
+        developer_reply = self.python_developer.respond(
+            "Prepare a concise GitHub pull request body in Markdown.\n"
+            f"Repository: {repo}\n"
+            f"Head branch: {head}\n"
+            f"Base branch: {base}\n"
+            f"Title: {title}\n"
+            "Include summary, impact, and validation checklist."
+        )
+        pr_body = developer_reply.text
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Senior Python Developer -> Assistant] Подготовил PR body:\n{pr_body}",
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Assistant -> GitHub] Открываю draft PR в {repo}: {head} -> {base}.",
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
+        result = self.github.create_pull_request(
+            repo=repo,
+            head=head,
+            base=base,
+            title=title,
+            body=pr_body,
+            draft=True,
+        )
+        self.store.append(
+            Event.create(
+                event_type="tool_call_completed",
+                actor_type="tool",
+                actor_id="github.pr_open",
+                visibility="public",
+                payload={
+                    "repo": repo,
+                    "head": head,
+                    "base": base,
+                    "title": title,
+                    "ok": result.ok,
+                    "url": result.url,
+                    "message": result.message,
+                },
+                request_id=request_id,
+                conversation_id=conversation_id,
+                telegram_chat_id=message.chat_id,
+                target_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+        )
+        if result.ok:
+            text_result = f"[GitHub -> Assistant] {result.message}"
+            final = f"[Assistant] PR открыт: {result.url}"
+        else:
+            text_result = f"[GitHub -> Assistant] Не удалось открыть PR: {result.message}"
+            final = f"[Assistant] GitHub вернул ошибку при открытии PR: {result.message}"
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=text_result,
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=final,
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
 
     def delegate_python_developer_from_assistant(
         self,
@@ -741,6 +864,15 @@ class AgentWorkspaceApp:
                 return parts[1].strip()
             return "Нужно уточнить задачу."
         return stripped
+
+    def parse_python_pr_command(self, text: str) -> tuple[str, str, str, str] | None:
+        parts = text.strip().split(maxsplit=4)
+        if len(parts) < 5:
+            return None
+        _command, repo, head, base, title = parts
+        if "/" not in repo or not head or not base or not title:
+            return None
+        return repo, head, base, title
 
     def emit_agent_message(
         self,

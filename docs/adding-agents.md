@@ -314,3 +314,4 @@ Purpose:
 - review and design Python code;
 - debug Python/backend problems;
 - use its own model credentials through `PYTHON_DEVELOPER_API_KEY`, `PYTHON_DEVELOPER_MODEL`, and `PYTHON_DEVELOPER_BASE_URL`.
+- open draft pull requests through GitHub capability `github.pr_open` when `GITHUB_TOKEN` is configured.

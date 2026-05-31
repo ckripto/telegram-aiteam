@@ -1,20 +1,12 @@
 import unittest
 
-from src.agent_mvp.agent_registry import SENIOR_PYTHON_DEVELOPER_ID, format_assistant_agent_context
 from src.agent_mvp.config import Config
-from src.agent_mvp.python_developer import SeniorPythonDeveloperRuntime
+from src.agent_mvp.github_gateway import GitHubGateway
 
 
-class SeniorPythonDeveloperTest(unittest.TestCase):
-    def test_agent_is_visible_to_assistant_context(self) -> None:
-        context = format_assistant_agent_context()
-
-        self.assertIn(SENIOR_PYTHON_DEVELOPER_ID, context)
-        self.assertIn("PYTHON_DEVELOPER_MODEL", context)
-        self.assertIn("python.code_review", context)
-
-    def test_offline_fallback_uses_own_credentials(self) -> None:
-        runtime = SeniorPythonDeveloperRuntime(
+class GitHubGatewayTest(unittest.TestCase):
+    def test_create_pr_requires_token(self) -> None:
+        gateway = GitHubGateway(
             Config(
                 telegram_bot_token="test",
                 telegram_allowed_chat_id=None,
@@ -35,11 +27,18 @@ class SeniorPythonDeveloperTest(unittest.TestCase):
             )
         )
 
-        reply = runtime.respond("Review this Python function")
+        result = gateway.create_pull_request(
+            repo="ckripto/telegram-aiteam",
+            head="feature",
+            base="main",
+            title="Test PR",
+            body="Body",
+        )
 
-        self.assertIn("PYTHON_DEVELOPER_API_KEY", reply.text)
-        self.assertIn("PYTHON_DEVELOPER_MODEL", reply.text)
+        self.assertFalse(result.ok)
+        self.assertIn("GITHUB_TOKEN", result.message)
 
 
 if __name__ == "__main__":
     unittest.main()
+

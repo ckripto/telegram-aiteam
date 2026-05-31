@@ -43,6 +43,9 @@ class Config:
     python_developer_api_key: str | None
     python_developer_model: str | None
     python_developer_base_url: str
+    github_token: str | None
+    github_default_repo: str | None
+    github_api_base_url: str
     database_path: str
     poll_timeout_seconds: int
     poll_interval_seconds: int
@@ -57,6 +60,10 @@ class Config:
     @property
     def python_developer_enabled(self) -> bool:
         return bool(self.python_developer_api_key and self.python_developer_model)
+
+    @property
+    def github_enabled(self) -> bool:
+        return bool(self.github_token)
 
 
 def load_config() -> Config:
@@ -74,6 +81,9 @@ def load_config() -> Config:
         python_developer_api_key=os.getenv("PYTHON_DEVELOPER_API_KEY") or None,
         python_developer_model=os.getenv("PYTHON_DEVELOPER_MODEL") or None,
         python_developer_base_url=os.getenv("PYTHON_DEVELOPER_BASE_URL", "https://api.openai.com/v1"),
+        github_token=os.getenv("GITHUB_TOKEN") or None,
+        github_default_repo=os.getenv("GITHUB_DEFAULT_REPO") or None,
+        github_api_base_url=os.getenv("GITHUB_API_BASE_URL", "https://api.github.com"),
         database_path=os.getenv("DATABASE_PATH", ".data/agent_workspace.sqlite3"),
         poll_timeout_seconds=int(os.getenv("POLL_TIMEOUT_SECONDS", "30")),
         poll_interval_seconds=int(os.getenv("POLL_INTERVAL_SECONDS", "1")),

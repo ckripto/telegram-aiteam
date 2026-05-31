@@ -43,6 +43,8 @@ python.code_review
 python.design
 python.debug
 python.explain
+github.repo_read
+github.pr_open
 ```
 
 ## Tool Classification
@@ -60,11 +62,12 @@ Examples:
 - `docs.search`;
 - `repo.read`;
 - `weather.forecast`;
-- `reminder.list`.
+- `reminder.list`;
 - `python.code_review`;
 - `python.design`;
 - `python.debug`;
-- `python.explain`.
+- `python.explain`;
+- `github.repo_read`.
 
 ### Write
 
@@ -78,6 +81,7 @@ Examples:
 - `repo.create_issue`;
 - `reminder.create`;
 - `telegram.send_message`.
+- `github.pr_open`.
 
 ### Dangerous
 

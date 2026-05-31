@@ -138,6 +138,19 @@ Assistant must not simulate this sequence with plain model text. If a specialist
 
 Specialist agents may use their own model credentials. The Telegram protocol does not expose tokens, but the registry and runtime should make it clear which agent owns which model configuration.
 
+### GitHub PR
+
+```text
+[Assistant] Делегирую Senior Python Developer подготовку PR description.
+[Senior Python Developer -> Assistant] Подготовил PR body:
+...
+[Assistant -> GitHub] Открываю draft PR в ckripto/telegram-aiteam: feature -> main.
+[GitHub -> Assistant] Pull request created: https://github.com/ckripto/telegram-aiteam/pull/1
+[Assistant] PR открыт: https://github.com/ckripto/telegram-aiteam/pull/1
+```
+
+Opening a PR is a write action. Explicit `/python_pr` commands can execute immediately; autonomous PR creation should request confirmation first.
+
 ### Planner Reminder
 
 ```text
