@@ -59,15 +59,6 @@ class TelegramClient:
             raise RuntimeError(f"Telegram API error: {result}")
         return result
 
-    def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, Any]]:
-        payload: dict[str, Any] = {
-            "timeout": timeout,
-            "allowed_updates": ["message"],
-        }
-        if offset is not None:
-            payload["offset"] = offset
-        return self._request("getUpdates", payload)["result"]
-
     def send_message(
         self,
         chat_id: int,
@@ -78,11 +69,21 @@ class TelegramClient:
             "chat_id": chat_id,
             "text": text,
             "disable_web_page_preview": True,
+            "parse_mode": "Markdown",
         }
         if reply_to_message_id is not None:
             payload["reply_parameters"] = {"message_id": reply_to_message_id}
         result = self._request("sendMessage", payload)["result"]
         return int(result["message_id"])
+
+    def get_updates(self, offset: int | None, timeout: int) -> list[dict[str, Any]]:
+        payload: dict[str, Any] = {
+            "timeout": timeout,
+            "allowed_updates": ["message"],
+        }
+        if offset is not None:
+            payload["offset"] = offset
+        return self._request("getUpdates", payload)["result"]
 
 
 def parse_message(update: dict[str, Any]) -> TelegramMessage | None:
@@ -104,4 +105,3 @@ def parse_message(update: dict[str, Any]) -> TelegramMessage | None:
         username=user.get("username"),
         first_name=user.get("first_name"),
     )
-
