@@ -184,12 +184,16 @@ class AgentWorkspaceApp:
                     "/reminders - показать ближайшие напоминания\n"
                     "/python_dev <задача> - делегировать Senior Python Developer\n"
                     "/python_pr <repo> <head> <base> <title> - открыть draft PR через Senior Python Developer\n"
+                    "/python_file <repo> <ref> <path> - прочитать файл из GitHub\n"
+                    "/python_change_file <repo> <base> <branch> <path> <task> - изменить файл через PR\n"
+                    "/python_merge_pr <repo> <number> CONFIRM - смержить PR после прямого указания\n"
                     "/prompt_for_agent <role>: <task> - подготовить промпт для будущего агента\n\n"
                     "Примеры:\n"
                     "/weather Moscow\n"
                     "/remind через 10 минут проверить сборку\n"
                     "/python_dev спроектируй FastAPI endpoint для задач\n"
                     "/python_pr ckripto/telegram-aiteam feature-branch main Добавить GitHub skill\n"
+                    "/python_file ckripto/telegram-aiteam main README.md\n"
                     "/remind завтра 09:30 написать план дня"
                 ),
                 reply_to_message_id=message.message_id,
@@ -251,7 +255,199 @@ class AgentWorkspaceApp:
             self.handle_python_pull_request(message, text, request_id, conversation_id)
             return True
 
+        if command == "/python_file":
+            self.handle_python_file_read(message, text, request_id, conversation_id)
+            return True
+
+        if command == "/python_change_file":
+            self.handle_python_file_change(message, text, request_id, conversation_id)
+            return True
+
+        if command == "/python_merge_pr":
+            self.handle_python_merge_pr(message, text, request_id, conversation_id)
+            return True
+
         return False
+
+    def handle_python_file_read(
+        self,
+        message: TelegramMessage,
+        text: str,
+        request_id: str,
+        conversation_id: str,
+    ) -> None:
+        parsed = self.parse_python_file_command(text)
+        if parsed is None:
+            self.emit_agent_message(
+                chat_id=message.chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text="[Assistant] Формат команды: /python_file <repo> <ref> <path>",
+                reply_to_message_id=message.message_id,
+                agent_id=PERSONAL_ASSISTANT_ID,
+            )
+            return
+
+        repo, ref, path = parsed
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Assistant -> Senior Python Developer] Прочитай файл {path} из {repo}@{ref}.",
+            reply_to_message_id=message.message_id,
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
+        result = self.github.get_file(repo=repo, path=path, ref=ref)
+        if not result.ok:
+            text_result = f"[GitHub -> Senior Python Developer] Не удалось прочитать файл: {result.message}"
+        else:
+            content = result.content or ""
+            preview = content[:3500]
+            suffix = "\n... output truncated ..." if len(content) > len(preview) else ""
+            text_result = f"[GitHub -> Senior Python Developer] {result.message}\n```text\n{preview}{suffix}\n```"
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=text_result,
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+
+    def handle_python_file_change(
+        self,
+        message: TelegramMessage,
+        text: str,
+        request_id: str,
+        conversation_id: str,
+    ) -> None:
+        parsed = self.parse_python_change_file_command(text)
+        if parsed is None:
+            self.emit_agent_message(
+                chat_id=message.chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=(
+                    "[Assistant] Формат команды:\n"
+                    "/python_change_file <repo> <base> <branch> <path> <task>\n"
+                    "Пример: /python_change_file ckripto/telegram-aiteam main codex/readme-update README.md Добавь раздел запуска"
+                ),
+                reply_to_message_id=message.message_id,
+                agent_id=PERSONAL_ASSISTANT_ID,
+            )
+            return
+
+        repo, base, branch, path, task = parsed
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Assistant] Делегирую Senior Python Developer изменение {path} через PR.",
+            reply_to_message_id=message.message_id,
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
+        file_result = self.github.get_file(repo=repo, path=path, ref=base)
+        if not file_result.ok or file_result.content is None:
+            self.emit_agent_message(
+                chat_id=message.chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[GitHub -> Senior Python Developer] Не удалось прочитать исходный файл: {file_result.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return
+
+        proposal = self.python_developer.propose_file_update(path=path, current_content=file_result.content, task=task)
+        if not proposal.ok or proposal.content is None:
+            self.emit_agent_message(
+                chat_id=message.chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[Senior Python Developer -> Assistant] Не смог подготовить изменение: {proposal.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return
+
+        write_result = self.github.create_or_update_file_on_branch(
+            repo=repo,
+            base_branch=base,
+            branch=branch,
+            path=path,
+            content=proposal.content,
+            message=f"Update {path}",
+        )
+        if not write_result.ok:
+            self.emit_agent_message(
+                chat_id=message.chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text=f"[GitHub -> Senior Python Developer] Не удалось записать файл: {write_result.message}",
+                agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+            )
+            return
+
+        title = f"Update {path}"
+        body = proposal.summary or f"Automated update for `{path}`.\n\nTask: {task}"
+        pr_result = self.github.create_pull_request(repo=repo, head=branch, base=base, title=title, body=body, draft=True)
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Senior Python Developer -> Assistant] Изменил {path} в ветке {branch}.",
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
+        if pr_result.ok:
+            final = f"[Assistant] PR с изменением открыт: {pr_result.url}"
+        else:
+            final = f"[Assistant] Файл изменён в ветке {branch}, но PR открыть не удалось: {pr_result.message}"
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=final,
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
+
+    def handle_python_merge_pr(
+        self,
+        message: TelegramMessage,
+        text: str,
+        request_id: str,
+        conversation_id: str,
+    ) -> None:
+        parsed = self.parse_python_merge_pr_command(text)
+        if parsed is None:
+            self.emit_agent_message(
+                chat_id=message.chat_id,
+                request_id=request_id,
+                conversation_id=conversation_id,
+                text="[Assistant] Для мержа нужно прямое указание: /python_merge_pr <repo> <number> CONFIRM",
+                reply_to_message_id=message.message_id,
+                agent_id=PERSONAL_ASSISTANT_ID,
+            )
+            return
+
+        repo, number = parsed
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=f"[Assistant -> GitHub] Получено прямое указание. Мержу PR #{number} в {repo}.",
+            reply_to_message_id=message.message_id,
+            agent_id=PERSONAL_ASSISTANT_ID,
+        )
+        result = self.github.merge_pull_request(repo=repo, pull_number=number)
+        final = (
+            f"[GitHub -> Assistant] PR #{number} смержен. SHA: {result.sha}"
+            if result.ok
+            else f"[GitHub -> Assistant] Не удалось смержить PR #{number}: {result.message}"
+        )
+        self.emit_agent_message(
+            chat_id=message.chat_id,
+            request_id=request_id,
+            conversation_id=conversation_id,
+            text=final,
+            agent_id=SENIOR_PYTHON_DEVELOPER_ID,
+        )
 
     def handle_python_pull_request(
         self,
@@ -873,6 +1069,36 @@ class AgentWorkspaceApp:
         if "/" not in repo or not head or not base or not title:
             return None
         return repo, head, base, title
+
+    def parse_python_file_command(self, text: str) -> tuple[str, str, str] | None:
+        parts = text.strip().split(maxsplit=3)
+        if len(parts) != 4:
+            return None
+        _command, repo, ref, path = parts
+        if "/" not in repo or not ref or not path:
+            return None
+        return repo, ref, path
+
+    def parse_python_change_file_command(self, text: str) -> tuple[str, str, str, str, str] | None:
+        parts = text.strip().split(maxsplit=5)
+        if len(parts) != 6:
+            return None
+        _command, repo, base, branch, path, task = parts
+        if "/" not in repo or not base or not branch or not path or not task:
+            return None
+        return repo, base, branch, path, task
+
+    def parse_python_merge_pr_command(self, text: str) -> tuple[str, int] | None:
+        parts = text.strip().split(maxsplit=3)
+        if len(parts) != 4:
+            return None
+        _command, repo, number, confirmation = parts
+        if "/" not in repo or confirmation != "CONFIRM":
+            return None
+        try:
+            return repo, int(number)
+        except ValueError:
+            return None
 
     def emit_agent_message(
         self,

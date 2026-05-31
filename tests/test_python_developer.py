@@ -12,6 +12,7 @@ class SeniorPythonDeveloperTest(unittest.TestCase):
         self.assertIn(SENIOR_PYTHON_DEVELOPER_ID, context)
         self.assertIn("PYTHON_DEVELOPER_MODEL", context)
         self.assertIn("python.code_review", context)
+        self.assertIn("github.pr_merge", context)
 
     def test_offline_fallback_uses_own_credentials(self) -> None:
         runtime = SeniorPythonDeveloperRuntime(

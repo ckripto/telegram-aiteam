@@ -149,7 +149,10 @@ Responsibilities:
 - debug Python issues;
 - explain Python tradeoffs;
 - prepare GitHub pull request descriptions;
+- read repository files through GitHub;
+- create file changes in a branch and open draft PRs;
 - open draft GitHub pull requests through the GitHub gateway when explicitly requested;
+- merge pull requests only after explicit user command with `CONFIRM`;
 - return technical output to Assistant for the final user-facing summary.
 
 Current command:
@@ -157,6 +160,9 @@ Current command:
 ```text
 /python_dev <task>
 /python_pr <repo> <head> <base> <title>
+/python_file <repo> <ref> <path>
+/python_change_file <repo> <base> <branch> <path> <task>
+/python_merge_pr <repo> <number> CONFIRM
 ```
 
 Current capabilities:
@@ -167,7 +173,10 @@ python.design
 python.debug
 python.explain
 github.repo_read
+github.file_read
+github.file_write
 github.pr_open
+github.pr_merge
 ```
 
 Dedicated model configuration:
@@ -181,7 +190,7 @@ GITHUB_DEFAULT_REPO
 GITHUB_API_BASE_URL
 ```
 
-`github.pr_open` is a write capability. Explicit `/python_pr` commands are treated as user-requested actions. Future autonomous PR creation must go through the confirmation policy before calling GitHub.
+`github.file_write`, `github.pr_open`, and `github.pr_merge` are write capabilities. Explicit `/python_pr`, `/python_change_file`, and `/python_merge_pr ... CONFIRM` commands are treated as user-requested actions. Future autonomous code changes, PR creation, or merging must go through the confirmation policy before calling GitHub.
 
 ## Future Agent: Project Agent
 

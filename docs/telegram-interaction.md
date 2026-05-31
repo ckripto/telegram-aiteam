@@ -151,6 +151,26 @@ Specialist agents may use their own model credentials. The Telegram protocol doe
 
 Opening a PR is a write action. Explicit `/python_pr` commands can execute immediately; autonomous PR creation should request confirmation first.
 
+### GitHub Code Change
+
+```text
+[Assistant -> Senior Python Developer] Прочитай файл README.md из ckripto/telegram-aiteam@main.
+[GitHub -> Senior Python Developer] Read README.md from ckripto/telegram-aiteam@main.
+[Assistant] Делегирую Senior Python Developer изменение README.md через PR.
+[Senior Python Developer -> Assistant] Изменил README.md в ветке codex/readme-update.
+[Assistant] PR с изменением открыт: https://github.com/ckripto/telegram-aiteam/pull/12
+```
+
+### GitHub Merge
+
+```text
+[User] /python_merge_pr ckripto/telegram-aiteam 12 CONFIRM
+[Assistant -> GitHub] Получено прямое указание. Мержу PR #12 в ckripto/telegram-aiteam.
+[GitHub -> Assistant] PR #12 смержен. SHA: ...
+```
+
+Merging requires the explicit command and literal `CONFIRM`. The assistant must not merge a PR from an indirect or ambiguous natural-language instruction.
+
 ### Planner Reminder
 
 ```text

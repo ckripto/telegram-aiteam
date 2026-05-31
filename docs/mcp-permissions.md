@@ -44,7 +44,10 @@ python.design
 python.debug
 python.explain
 github.repo_read
+github.file_read
+github.file_write
 github.pr_open
+github.pr_merge
 ```
 
 ## Tool Classification
@@ -68,6 +71,7 @@ Examples:
 - `python.debug`;
 - `python.explain`;
 - `github.repo_read`.
+- `github.file_read`.
 
 ### Write
 
@@ -82,6 +86,8 @@ Examples:
 - `reminder.create`;
 - `telegram.send_message`.
 - `github.pr_open`.
+- `github.file_write`.
+- `github.pr_merge`.
 
 ### Dangerous
 

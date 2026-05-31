@@ -65,6 +65,9 @@ python3 -m src.agent_mvp
 - `/reminders` - list pending reminders for the group.
 - `/python_dev <task>` - delegate to Senior Python Developer.
 - `/python_pr <repo> <head> <base> <title>` - ask Senior Python Developer to prepare a PR body and open a draft GitHub PR.
+- `/python_file <repo> <ref> <path>` - ask Senior Python Developer to read a file from GitHub.
+- `/python_change_file <repo> <base> <branch> <path> <task>` - ask Senior Python Developer to edit a file on a branch and open a draft PR.
+- `/python_merge_pr <repo> <number> CONFIRM` - merge a PR only after explicit confirmation.
 - `/prompt_for_agent <role>: <task>` - ask the assistant to prepare a prompt for a future agent.
 
 Reminder examples:
@@ -125,9 +128,12 @@ Senior Python Developer can also use GitHub capabilities when `GITHUB_TOKEN` is 
 
 ```text
 /python_pr ckripto/telegram-aiteam feature-branch main Add GitHub skill
+/python_file ckripto/telegram-aiteam main README.md
+/python_change_file ckripto/telegram-aiteam main codex/readme-update README.md Add setup instructions
+/python_merge_pr ckripto/telegram-aiteam 12 CONFIRM
 ```
 
-This creates a draft PR from an existing pushed branch. It does not create commits or push branches by itself.
+`/python_change_file` creates or reuses the requested branch, writes the generated full-file replacement there, and opens a draft PR. `/python_merge_pr` is intentionally strict and requires the literal `CONFIRM`.
 
 ## Project Structure
 

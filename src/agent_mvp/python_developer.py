@@ -33,6 +33,14 @@ class PythonDeveloperReply:
     internal_summary: str
 
 
+@dataclass(frozen=True)
+class FileUpdateProposal:
+    ok: bool
+    message: str
+    content: str | None = None
+    summary: str | None = None
+
+
 class SeniorPythonDeveloperRuntime:
     def __init__(self, config: Config) -> None:
         self.config = config
@@ -47,6 +55,38 @@ class SeniorPythonDeveloperRuntime:
                 internal_summary="Senior Python Developer offline fallback.",
             )
         return self._respond_with_model(task)
+
+    def propose_file_update(self, path: str, current_content: str, task: str) -> FileUpdateProposal:
+        if not self.config.python_developer_enabled:
+            return FileUpdateProposal(
+                ok=False,
+                message="PYTHON_DEVELOPER_API_KEY and PYTHON_DEVELOPER_MODEL are required to generate file changes.",
+            )
+
+        prompt = (
+            "You are editing a repository file. Return JSON only with keys `content` and `summary`.\n"
+            "`content` must be the complete replacement file content, not a patch.\n"
+            "`summary` must explain the change in 1-3 short bullet points.\n\n"
+            f"Path: {path}\n"
+            f"Task: {task}\n\n"
+            "Current file content:\n"
+            "```text\n"
+            f"{current_content}\n"
+            "```"
+        )
+        reply = self._respond_with_model(prompt)
+        try:
+            parsed = json.loads(reply.text)
+        except json.JSONDecodeError:
+            return FileUpdateProposal(ok=False, message="Model did not return valid JSON for file update.")
+
+        content = parsed.get("content")
+        summary = parsed.get("summary")
+        if not isinstance(content, str) or not content:
+            return FileUpdateProposal(ok=False, message="Model response did not include non-empty `content`.")
+        if not isinstance(summary, str):
+            summary = "Automated file update."
+        return FileUpdateProposal(ok=True, message="Prepared file update.", content=content, summary=summary)
 
     def _respond_with_model(self, task: str) -> PythonDeveloperReply:
         assert self.config.python_developer_api_key is not None
@@ -103,4 +143,3 @@ class SeniorPythonDeveloperRuntime:
                 if content.get("type") in {"output_text", "text"} and content.get("text"):
                     chunks.append(str(content["text"]))
         return "\n".join(chunks).strip()
-

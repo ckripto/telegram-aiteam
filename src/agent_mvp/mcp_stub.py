@@ -30,7 +30,10 @@ class McpGatewayStub:
             "python.debug",
             "python.explain",
             "github.repo_read",
+            "github.file_read",
+            "github.file_write",
             "github.pr_open",
+            "github.pr_merge",
         ]
 
     def read_status(self) -> ToolResult:
