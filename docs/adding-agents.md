@@ -20,8 +20,10 @@ Telegram update
 The important files are:
 
 - `src/agent_mvp/agent_registry.py` - declare the agent, commands, and capabilities.
-- `src/agent_mvp/app.py` - route commands/messages to the agent.
-- `src/agent_mvp/storage.py` - add persistence only when the agent needs durable state.
+- `src/agent_mvp/routing.py` - route explicit commands/messages to the agent workflow.
+- `src/agent_mvp/specialist_workflows.py` - add bounded specialist execution flows.
+- `src/agent_mvp/telegram_rendering.py` - keep visible Telegram event rendering centralized.
+- `src/agent_mvp/storage.py` - add persistence through migrations only when the agent needs durable state.
 - `src/agent_mvp/mcp_stub.py` - list demo capabilities until the real MCP gateway exists.
 - `tests/` - add small tests around parsing, routing helpers, and storage.
 
@@ -33,11 +35,11 @@ The important files are:
 4. Set `receives_delegations=True` when Assistant may assign work to this agent.
 5. Add the specialist to `format_assistant_agent_context()` by keeping it in the shared `AGENTS` registry.
 6. If the agent uses a dedicated model, set `model_env`, `api_key_env`, and optional `base_url_env`.
-7. Add explicit command routing in `handle_command` when the command is part of the product.
+7. Add explicit command routing in `routing.py` when the command is part of the product.
 8. Do not add keyword-based natural-language routing in `handle_message`.
 9. Expose the agent through the registry so Assistant/model routing can choose it.
 10. Route user-facing specialist work through Assistant delegation, not as an invisible direct call.
-11. Emit all visible messages through `emit_agent_message(..., agent_id=...)`.
+11. Emit all visible messages through `emit_agent_message(..., agent_id=...)` or the shared renderer.
 12. Store delegation with `agent_delegation_requested` and meaningful internal events with `EventStore.append`.
 13. Return specialist results to Assistant, then let Assistant publish the final user-facing summary.
 14. Add tests for parsing and deterministic behavior.
@@ -264,7 +266,7 @@ Avoid tests that require:
 Files:
 
 - `assistant.py`;
-- route in `app.py`;
+- default routing in `routing.py`;
 - command `/prompt_for_agent`.
 
 Purpose:
@@ -278,7 +280,8 @@ Purpose:
 Files:
 
 - `weather.py`;
-- route in `app.py`;
+- workflow in `specialist_workflows.py`;
+- command route in `routing.py`;
 - command `/weather`.
 
 Purpose:
@@ -293,7 +296,8 @@ Files:
 
 - `reminders.py`;
 - reminder persistence in `storage.py`;
-- scheduler in `app.py`;
+- due-reminder workflow in `specialist_workflows.py`;
+- command routes in `routing.py`;
 - commands `/remind` and `/reminders`.
 
 Purpose:
@@ -306,7 +310,8 @@ Purpose:
 Files:
 
 - `python_developer.py`;
-- route in `app.py`;
+- workflow in `specialist_workflows.py`;
+- command routes in `routing.py`;
 - commands `/python_dev`, `/python_file`, `/python_change_file`, `/python_pr`, and `/python_merge_pr`.
 
 Purpose:

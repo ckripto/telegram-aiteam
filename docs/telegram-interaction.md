@@ -161,7 +161,7 @@ Opening a PR is a write action. Explicit `/python_pr` commands can execute immed
 [GitHub -> Senior Python Developer] Текущий проект: ckripto/telegram-aiteam, base branch: main.
 [Senior Python Developer -> GitHub] Для PR прочитаю файлы:
 - src/agent_mvp/telegram.py
-- src/agent_mvp/app.py
+- src/agent_mvp/routing.py
 [Senior Python Developer -> Assistant] Подготовил изменения для ветки codex/telegram-markdown.
 [GitHub -> Assistant] Pull request created: https://github.com/ckripto/telegram-aiteam/pull/13
 [Assistant] Senior Python Developer открыл draft PR: https://github.com/ckripto/telegram-aiteam/pull/13

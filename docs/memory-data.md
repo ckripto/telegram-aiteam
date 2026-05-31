@@ -1,5 +1,16 @@
 # Memory And Data Model
 
+## SQLite Migration Status
+
+The local SQLite schema is managed by versioned stdlib migrations in `src/agent_mvp/storage.py`.
+
+- Version 1: preserves the current runtime `events` and `reminders` tables and their indexes.
+- Version 2: adds the future memory/project/agent coordination tables described below.
+
+Migrations are tracked in `schema_migrations` and run automatically when `EventStore` opens a database. Re-running initialization is expected to be idempotent.
+
+The existing `events` and `reminders` tables are intentionally not rewritten to match every future field in this document yet. They remain backward-compatible runtime tables; new memory-model tables are additive.
+
 ## Storage Goals
 
 The system needs durable state for:
@@ -18,6 +29,21 @@ The system needs durable state for:
 For local development, SQLite is enough. For production, use Postgres.
 
 ## Main Entities
+
+Current SQLite table names:
+
+- `workspaces`
+- `telegram_chats`
+- `users`
+- `agents`
+- `events`
+- `agent_runs`
+- `tool_calls`
+- `confirmations`
+- `reminders`
+- `memories`
+- `projects`
+- `delegations`
 
 ### Workspace
 
@@ -76,6 +102,8 @@ Fields:
 ### Event
 
 Append-only event log.
+
+Current runtime note: SQLite migration version 1 keeps the existing `events` schema with `request_id`, `conversation_id`, Telegram ids, `payload_json`, and actor/target fields. Future workspace-scoped event fields should be added through a backward-compatible migration.
 
 Fields:
 
@@ -173,6 +201,8 @@ Statuses:
 ### Reminder
 
 Represents a Telegram reminder created by the planner assistant.
+
+Current runtime note: SQLite migration version 1 keeps the existing `reminders` schema used by Planner. Future status values should be additive.
 
 Fields:
 

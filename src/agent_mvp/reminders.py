@@ -48,16 +48,19 @@ class ReminderParser:
         return text
 
     def _parse_relative(self, text: str, now: datetime) -> ReminderRequest | None:
-        match = re.match(
-            r"(?i)^через\s+(\d+)\s+(минут(?:у|ы)?|час(?:а|ов)?|дн(?:я|ей|ь)?)\s+(.+)$",
+        match = re.search(
+            r"(?i)(?:^|\s)через\s+(?:(\d+)\s+)?(минут(?:у|ы)?|час(?:а|ов)?|д(?:ень|ня|ней)?)\b",
             text,
         )
         if not match:
             return None
 
-        amount = int(match.group(1))
+        amount = int(match.group(1) or "1")
         unit = match.group(2).lower()
-        reminder_text = match.group(3).strip()
+        reminder_text = self._remove_relative_time(text, match).strip()
+        if not reminder_text:
+            return None
+
         if unit.startswith("минут"):
             due_at = now + timedelta(minutes=amount)
             human = f"через {amount} мин."
@@ -69,6 +72,13 @@ class ReminderParser:
             human = f"через {amount} дн."
 
         return ReminderRequest(due_at=due_at.isoformat(), text=reminder_text, human_time=human)
+
+    def _remove_relative_time(self, text: str, match: re.Match[str]) -> str:
+        before = text[:match.start()].strip(" ,.-")
+        after = text[match.end():].strip(" ,.-")
+        if before and after:
+            return f"{before} {after}"
+        return (before or re.sub(r"(?i)^(и|а)\s+", "", after)).strip()
 
     def _parse_absolute(self, text: str, now: datetime) -> ReminderRequest | None:
         match = re.match(r"^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})\s+(.+)$", text)

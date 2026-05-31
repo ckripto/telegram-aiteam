@@ -2,6 +2,18 @@
 
 The system should be built as separate modules so development can proceed incrementally.
 
+## Current Runtime Boundaries
+
+The current `src/agent_mvp` package keeps `AgentWorkspaceApp` as the composition root and polling loop. Runtime behavior is split across:
+
+- `app.py` - wires config, gateways, runtimes, storage, renderer, router, and specialist workflows.
+- `routing.py` - accepts Telegram messages, records inbound events, handles explicit commands, and applies Assistant routing decisions.
+- `telegram_rendering.py` - sends visible agent messages to Telegram and records rendered `agent_message` and delegation events.
+- `specialist_workflows.py` - owns Weather, Planner/reminder, and Senior Python Developer workflows, including GitHub command flows.
+- `storage.py` - owns SQLite connection setup, versioned migrations, event persistence, and reminder persistence.
+
+Keep this split when adding new agents: routing decides the product entry point, specialist workflows execute bounded work, and rendering remains the only path for public Telegram collaboration messages.
+
 ## 1. Telegram Adapter
 
 Purpose: connect Telegram groups to the backend.
@@ -78,6 +90,8 @@ Initial deliverables:
 - direct mention routing, for example `@assistant`;
 - confirmation routing by pending action id.
 
+Current module: `src/agent_mvp/routing.py`.
+
 ## 5. Agent Runtime
 
 Purpose: run one agent turn and produce structured outputs.
@@ -136,6 +150,8 @@ Initial deliverables:
 - per-event visibility levels;
 - compact tool call rendering.
 
+Current module: `src/agent_mvp/telegram_rendering.py`.
+
 ## 8. MCP Gateway
 
 Purpose: provide controlled access to internal systems.
@@ -191,6 +207,8 @@ Initial deliverables:
 - workspace-level memory;
 - user-level memory;
 - manual memory write action.
+
+Current schema foundation: `src/agent_mvp/storage.py` migration version 2 creates memory, project, delegation, agent run, tool call, confirmation, workspace, chat, user, and agent tables. Runtime memory APIs are still future work.
 
 ## 11. Project Workspace
 

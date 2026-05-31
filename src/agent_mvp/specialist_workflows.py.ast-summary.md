@@ -1,4 +1,4 @@
-# AST Summary: `src/agent_mvp/app.py`
+# AST Summary: `src/agent_mvp/specialist_workflows.py`
 
 Structural cache for future agents; update when the source file shape changes materially.
 
@@ -8,27 +8,30 @@ _None._
 
 ## Exported Symbols
 
-- `AgentWorkspaceApp`
-- `main`
-- `AgentMvpApp`
-
-## Top-Level Functions
-
-- `def main() -> None`
+- `SpecialistWorkflows`
 
 ## Classes
 
-### `AgentWorkspaceApp`
+### `SpecialistWorkflows`
 
-Composition root for config, Telegram client, storage, agent runtimes, gateways, renderer, router, and specialist workflow helpers. `run_polling` remains here; message routing, Telegram rendering, and specialist work are delegated to extracted modules. Most public workflow methods are compatibility wrappers around `SpecialistWorkflows`.
+Owns bounded specialist workflows extracted from `AgentWorkspaceApp`: Weather delegation, Planner/reminder handling, Senior Python Developer delegation, GitHub file/PR/merge commands, deferred intent execution, weather parsing helpers, and developer command parsers. It receives the app composition root and renderer, then reads runtime dependencies through properties so tests can still replace `app.telegram`, `app.weather`, `app.github`, or `app.python_developer`.
+
+Properties:
+
+- `config`
+- `store`
+- `assistant`
+- `python_developer`
+- `github`
+- `weather`
+- `reminder_parser`
+- `timezone`
 
 Methods:
 
-- `def __init__(self, config: Config) -> None`
-- `def stop(self) -> None`
-- `def run_polling(self) -> None`
-- `def handle_message(self, message: TelegramMessage) -> None`
-- `def handle_command(self, message: TelegramMessage, text: str, request_id: str, conversation_id: str) -> bool`
+- `def __init__(self, app: Any, renderer: Any) -> None`
+- `def emit_agent_message(self, chat_id: int, request_id: str, conversation_id: str, text: str, reply_to_message_id: int | None = None, agent_id: str = PERSONAL_ASSISTANT_ID) -> None`
+- `def emit_delegation_event(self, from_agent_id: str, to_agent_id: str, task: str, request_id: str, conversation_id: str, chat_id: int) -> None`
 - `def handle_python_file_read(self, message: TelegramMessage, text: str, request_id: str, conversation_id: str) -> None`
 - `def handle_python_file_change(self, message: TelegramMessage, text: str, request_id: str, conversation_id: str) -> None`
 - `def handle_python_merge_pr(self, message: TelegramMessage, text: str, request_id: str, conversation_id: str) -> None`
@@ -56,5 +59,3 @@ Methods:
 - `def parse_python_file_command(self, text: str) -> tuple[str, str, str] | None`
 - `def parse_python_change_file_command(self, text: str) -> tuple[str, str, str, str, str] | None`
 - `def parse_python_merge_pr_command(self, text: str) -> tuple[str, int] | None`
-- `def emit_agent_message(self, chat_id: int, request_id: str, conversation_id: str, text: str, reply_to_message_id: int | None = None, agent_id: str = PERSONAL_ASSISTANT_ID) -> None`
-- `def emit_delegation_event(self, from_agent_id: str, to_agent_id: str, task: str, request_id: str, conversation_id: str, chat_id: int) -> None`

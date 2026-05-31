@@ -15,7 +15,19 @@ The key product requirement is that the Telegram group should show the interacti
 - [MCP And Permissions](./mcp-permissions.md)
 - [Memory And Data Model](./memory-data.md)
 - [Development Roadmap](./roadmap.md)
+- [Developer Workflow](./developer-workflow.md)
 - [Adding New Agents](./adding-agents.md)
+
+## AI Agent Navigation
+
+For maintenance tasks, read in this order:
+
+1. Root `AGENTS.md` for project-wide memory, commands, and constraints.
+2. The nearest directory `AGENTS.md` for local ownership rules.
+3. `README.md` and [Developer Workflow](./developer-workflow.md) for run/test/env instructions.
+4. [Module Plan](./modules.md) for runtime boundaries.
+5. [Memory And Data Model](./memory-data.md) before changing storage.
+6. Neighboring `*.ast-summary.md` files before opening large Python sources.
 
 ## Design Principles
 

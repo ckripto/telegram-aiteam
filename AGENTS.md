@@ -14,9 +14,13 @@ Telegram Bot API long polling
 TelegramClient / parse_message
     |
 AgentWorkspaceApp
-    |-- command router
-    |-- visible event renderer
-    |-- reminder scheduler
+    |-- MessageRouter
+    |-- TelegramEventRenderer
+    |-- SpecialistWorkflows
+    |       |-- weather workflow
+    |       |-- planner/reminder workflow
+    |       `-- developer/GitHub workflow
+    |-- reminder scheduler trigger
     |
     +--> AssistantRuntime
     |       |-- OpenAI Responses API
@@ -60,6 +64,7 @@ AgentWorkspaceApp
 - Read the nearest `AGENTS.md` before editing a directory.
 - For Python files with a neighboring `*.ast-summary.md`, read the summary first and open the full source only when implementation details are needed.
 - Do not reread a large file when an up-to-date AST summary already answers the question.
+- Use `docs/README.md` and `docs/developer-workflow.md` as the documentation navigation path for future AI-agent maintenance.
 
 ## TECH STACK
 
@@ -74,3 +79,4 @@ AgentWorkspaceApp
 ## CHANGE LOG
 
 - 2026-05-31, Documentation Agent: created repository context bootstrap with root and directory `AGENTS.md` files plus AST summaries for large Python files.
+- 2026-05-31, Codex: documented developer workflow, split app routing/rendering/specialist workflows into modules, and added versioned SQLite migrations for the memory data model.

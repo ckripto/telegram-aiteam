@@ -1,9 +1,22 @@
+import sqlite3
 import tempfile
 import unittest
 
 from src.agent_mvp.events import Event
 from src.agent_mvp.events import utc_now
-from src.agent_mvp.storage import EventStore
+from src.agent_mvp.storage import EventStore, MIGRATIONS
+
+
+def table_names(database_path: str) -> set[str]:
+    with sqlite3.connect(database_path) as conn:
+        rows = conn.execute(
+            """
+            select name
+            from sqlite_master
+            where type = 'table'
+            """
+        ).fetchall()
+    return {str(row[0]) for row in rows}
 
 
 class EventStoreTest(unittest.TestCase):
@@ -44,6 +57,43 @@ class EventStoreTest(unittest.TestCase):
 
             self.assertEqual(store.pending_reminders(123), [])
             self.assertEqual(store.due_reminders("2026-05-31T12:02:00+03:00"), [])
+
+    def test_migrations_create_new_database_schema(self) -> None:
+        with tempfile.NamedTemporaryFile() as tmp:
+            store = EventStore(tmp.name)
+
+            self.assertEqual(
+                [migration["version"] for migration in store.applied_migrations()],
+                [migration.version for migration in MIGRATIONS],
+            )
+            self.assertTrue(
+                {
+                    "schema_migrations",
+                    "events",
+                    "reminders",
+                    "workspaces",
+                    "telegram_chats",
+                    "users",
+                    "agents",
+                    "agent_runs",
+                    "tool_calls",
+                    "confirmations",
+                    "memories",
+                    "projects",
+                    "delegations",
+                }.issubset(table_names(tmp.name))
+            )
+
+    def test_migrations_are_idempotent(self) -> None:
+        with tempfile.NamedTemporaryFile() as tmp:
+            first_store = EventStore(tmp.name)
+            first_versions = [migration["version"] for migration in first_store.applied_migrations()]
+
+            second_store = EventStore(tmp.name)
+            second_versions = [migration["version"] for migration in second_store.applied_migrations()]
+
+            self.assertEqual(first_versions, second_versions)
+            self.assertEqual(second_versions, [migration.version for migration in MIGRATIONS])
 
 
 if __name__ == "__main__":

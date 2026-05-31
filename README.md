@@ -55,6 +55,18 @@ WEATHER_DEFAULT_LOCATION=Moscow
 python3 -m src.agent_mvp
 ```
 
+## Developer Workflow
+
+Canonical local checks:
+
+```bash
+python3 -m unittest discover -s tests
+python3 -m compileall src tests
+git diff --check
+```
+
+The committed environment template is `.env.example`; copy it to `.env` for local runs. Developer workflow rules for commands, env updates, migrations, and repository memory live in [docs/developer-workflow.md](./docs/developer-workflow.md).
+
 ## Telegram Commands
 
 - `/help` - show available commands.
@@ -147,15 +159,18 @@ Telegram messages are split before sending so each chunk stays below Telegram's 
 src/agent_mvp/
   __main__.py          CLI entrypoint
   agent_registry.py    Virtual agent definitions
-  app.py              Main polling application
+  app.py               Runtime wiring and long-polling loop
   assistant.py        Assistant runtime and prompts
   config.py           Environment loading
   events.py           Event model
   mcp_stub.py         Placeholder MCP capability layer
   python_developer.py Senior Python Developer runtime
+  routing.py          Telegram message and command router
   reminders.py        Reminder parsing
-  storage.py          SQLite event log
+  specialist_workflows.py Weather, planner, and developer workflows
+  storage.py          SQLite event log, reminders, and schema migrations
   telegram.py         Telegram Bot API client
+  telegram_rendering.py Visible Telegram event renderer
   weather.py          Open-Meteo weather capability
 ```
 
