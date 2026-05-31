@@ -333,6 +333,14 @@ class GitHubGateway:
             return {"ok": True, "data": json.loads(body) if body else {}}
         except urllib.error.HTTPError as exc:
             error_body = exc.read().decode("utf-8", errors="replace")
-            return {"ok": False, "message": f"GitHub API error {exc.code}: {error_body[:900]}"}
+            permission_hint = exc.headers.get("X-Accepted-GitHub-Permissions")
+            scope_hint = exc.headers.get("X-OAuth-Scopes")
+            hints = []
+            if permission_hint:
+                hints.append(f"accepted permissions: {permission_hint}")
+            if scope_hint:
+                hints.append(f"token scopes: {scope_hint}")
+            hint_text = f" ({'; '.join(hints)})" if hints else ""
+            return {"ok": False, "message": f"GitHub API error {exc.code}: {error_body[:900]}{hint_text}"}
         except OSError as exc:
             return {"ok": False, "message": f"GitHub connection error: {exc}"}
