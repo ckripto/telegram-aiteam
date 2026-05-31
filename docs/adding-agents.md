@@ -307,7 +307,7 @@ Files:
 
 - `python_developer.py`;
 - route in `app.py`;
-- command `/python_dev`.
+- commands `/python_dev`, `/python_file`, `/python_change_file`, `/python_pr`, and `/python_merge_pr`.
 
 Purpose:
 
@@ -318,3 +318,6 @@ Purpose:
 - create file changes through `github.file_write`;
 - open draft pull requests through `github.pr_open`;
 - merge pull requests through `github.pr_merge` only after explicit user command with `CONFIRM`.
+- use `GITHUB_DEFAULT_REPO` as the current project codebase when the user does not provide an explicit `owner/repo`.
+
+When adding another code-capable agent, document how it receives the current project. The default rule is: omitted repository means `GITHUB_DEFAULT_REPO`, and that repository is the software project currently being developed, including this agent workspace unless the user explicitly switches projects.

@@ -141,6 +141,7 @@ Specialist agents may use their own model credentials. The Telegram protocol doe
 ### GitHub PR
 
 ```text
+[User] /python_pr feature main Add GitHub skill
 [Assistant] Делегирую Senior Python Developer подготовку PR description.
 [Senior Python Developer -> Assistant] Подготовил PR body:
 ...
@@ -149,11 +150,12 @@ Specialist agents may use their own model credentials. The Telegram protocol doe
 [Assistant] PR открыт: https://github.com/ckripto/telegram-aiteam/pull/1
 ```
 
-Opening a PR is a write action. Explicit `/python_pr` commands can execute immediately; autonomous PR creation should request confirmation first.
+Opening a PR is a write action. Explicit `/python_pr` commands can execute immediately; autonomous PR creation should request confirmation first. If the command omits `repo`, GitHub uses `GITHUB_DEFAULT_REPO` as the current project codebase.
 
 ### GitHub Code Change
 
 ```text
+[User] /python_change_file main codex/readme-update README.md Add setup instructions
 [Assistant -> Senior Python Developer] Прочитай файл README.md из ckripto/telegram-aiteam@main.
 [GitHub -> Senior Python Developer] Read README.md from ckripto/telegram-aiteam@main.
 [Assistant] Делегирую Senior Python Developer изменение README.md через PR.
@@ -161,10 +163,12 @@ Opening a PR is a write action. Explicit `/python_pr` commands can execute immed
 [Assistant] PR с изменением открыт: https://github.com/ckripto/telegram-aiteam/pull/12
 ```
 
+`GITHUB_DEFAULT_REPO` is the repository for the current software project and for the agent workspace itself. Senior Python Developer should use it whenever the user says "this project", "current code", or omits a repository in GitHub commands.
+
 ### GitHub Merge
 
 ```text
-[User] /python_merge_pr ckripto/telegram-aiteam 12 CONFIRM
+[User] /python_merge_pr 12 CONFIRM
 [Assistant -> GitHub] Получено прямое указание. Мержу PR #12 в ckripto/telegram-aiteam.
 [GitHub -> Assistant] PR #12 смержен. SHA: ...
 ```

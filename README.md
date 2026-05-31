@@ -64,10 +64,10 @@ python3 -m src.agent_mvp
 - `/remind <time> <text>` - ask the planner to remind you in Telegram.
 - `/reminders` - list pending reminders for the group.
 - `/python_dev <task>` - delegate to Senior Python Developer.
-- `/python_pr <repo> <head> <base> <title>` - ask Senior Python Developer to prepare a PR body and open a draft GitHub PR.
-- `/python_file <repo> <ref> <path>` - ask Senior Python Developer to read a file from GitHub.
-- `/python_change_file <repo> <base> <branch> <path> <task>` - ask Senior Python Developer to edit a file on a branch and open a draft PR.
-- `/python_merge_pr <repo> <number> CONFIRM` - merge a PR only after explicit confirmation.
+- `/python_pr [repo] <head> <base> <title>` - ask Senior Python Developer to prepare a PR body and open a draft GitHub PR.
+- `/python_file [repo] <ref> <path>` - ask Senior Python Developer to read a file from GitHub.
+- `/python_change_file [repo] <base> <branch> <path> <task>` - ask Senior Python Developer to edit a file on a branch and open a draft PR.
+- `/python_merge_pr [repo] <number> CONFIRM` - merge a PR only after explicit confirmation.
 - `/prompt_for_agent <role>: <task>` - ask the assistant to prepare a prompt for a future agent.
 
 Reminder examples:
@@ -127,11 +127,13 @@ PYTHON_DEVELOPER_BASE_URL
 Senior Python Developer can also use GitHub capabilities when `GITHUB_TOKEN` is configured:
 
 ```text
-/python_pr ckripto/telegram-aiteam feature-branch main Add GitHub skill
-/python_file ckripto/telegram-aiteam main README.md
-/python_change_file ckripto/telegram-aiteam main codex/readme-update README.md Add setup instructions
-/python_merge_pr ckripto/telegram-aiteam 12 CONFIRM
+/python_pr feature-branch main Add GitHub skill
+/python_file main README.md
+/python_change_file main codex/readme-update README.md Add setup instructions
+/python_merge_pr 12 CONFIRM
 ```
+
+When `repo` is omitted, the GitHub gateway uses `GITHUB_DEFAULT_REPO`. Treat this value as the current project repository: it is the codebase being developed, including the Telegram AI team itself. Commands may still pass an explicit `owner/repo` to work with another repository.
 
 `/python_change_file` creates or reuses the requested branch, writes the generated full-file replacement there, and opens a draft PR. `/python_merge_pr` is intentionally strict and requires the literal `CONFIRM`.
 

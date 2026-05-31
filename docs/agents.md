@@ -159,10 +159,10 @@ Current command:
 
 ```text
 /python_dev <task>
-/python_pr <repo> <head> <base> <title>
-/python_file <repo> <ref> <path>
-/python_change_file <repo> <base> <branch> <path> <task>
-/python_merge_pr <repo> <number> CONFIRM
+/python_pr [repo] <head> <base> <title>
+/python_file [repo] <ref> <path>
+/python_change_file [repo] <base> <branch> <path> <task>
+/python_merge_pr [repo] <number> CONFIRM
 ```
 
 Current capabilities:
@@ -189,6 +189,8 @@ GITHUB_TOKEN
 GITHUB_DEFAULT_REPO
 GITHUB_API_BASE_URL
 ```
+
+`GITHUB_DEFAULT_REPO` is the current project repository. If the user does not name a repository explicitly, Assistant and Senior Python Developer must use `GITHUB_DEFAULT_REPO` as the codebase being developed, including the code that powers this agent workspace. This keeps the developer agent from asking for a repository link when the default project is already configured. An explicit `owner/repo` in a command overrides the default for that command only.
 
 `github.file_write`, `github.pr_open`, and `github.pr_merge` are write capabilities. Explicit `/python_pr`, `/python_change_file`, and `/python_merge_pr ... CONFIRM` commands are treated as user-requested actions. Future autonomous code changes, PR creation, or merging must go through the confirmation policy before calling GitHub.
 

@@ -183,17 +183,18 @@ class AgentWorkspaceApp:
                     "/remind <время> <текст> - попросить планировщика напомнить\n"
                     "/reminders - показать ближайшие напоминания\n"
                     "/python_dev <задача> - делегировать Senior Python Developer\n"
-                    "/python_pr <repo> <head> <base> <title> - открыть draft PR через Senior Python Developer\n"
-                    "/python_file <repo> <ref> <path> - прочитать файл из GitHub\n"
-                    "/python_change_file <repo> <base> <branch> <path> <task> - изменить файл через PR\n"
-                    "/python_merge_pr <repo> <number> CONFIRM - смержить PR после прямого указания\n"
+                    "/python_pr [repo] <head> <base> <title> - открыть draft PR через Senior Python Developer\n"
+                    "/python_file [repo] <ref> <path> - прочитать файл из GitHub\n"
+                    "/python_change_file [repo] <base> <branch> <path> <task> - изменить файл через PR\n"
+                    "/python_merge_pr [repo] <number> CONFIRM - смержить PR после прямого указания\n"
                     "/prompt_for_agent <role>: <task> - подготовить промпт для будущего агента\n\n"
                     "Примеры:\n"
                     "/weather Moscow\n"
                     "/remind через 10 минут проверить сборку\n"
                     "/python_dev спроектируй FastAPI endpoint для задач\n"
-                    "/python_pr ckripto/telegram-aiteam feature-branch main Добавить GitHub skill\n"
-                    "/python_file ckripto/telegram-aiteam main README.md\n"
+                    "/python_pr feature-branch main Добавить GitHub skill\n"
+                    "/python_file main README.md\n"
+                    "/python_change_file main codex/readme-update README.md Добавь раздел запуска\n"
                     "/remind завтра 09:30 написать план дня"
                 ),
                 reply_to_message_id=message.message_id,
@@ -223,6 +224,7 @@ class AgentWorkspaceApp:
                     f"- OpenAI runtime: {openai_status}\n"
                     f"- Senior Python Developer runtime: {'enabled' if self.config.python_developer_enabled else 'offline fallback'}\n"
                     f"- GitHub capability: {'enabled' if self.config.github_enabled else 'not configured'}\n"
+                    f"- GitHub default repo: {self.config.github_default_repo or 'not configured'}\n"
                     f"- event log: {self.store.count_events()} events\n"
                     f"- timezone: {self.config.local_timezone}\n"
                     f"- weather default: {self.config.weather_default_location}\n"
@@ -282,7 +284,7 @@ class AgentWorkspaceApp:
                 chat_id=message.chat_id,
                 request_id=request_id,
                 conversation_id=conversation_id,
-                text="[Assistant] Формат команды: /python_file <repo> <ref> <path>",
+                text="[Assistant] Формат команды: /python_file [repo] <ref> <path>. Если repo не указан, нужен GITHUB_DEFAULT_REPO.",
                 reply_to_message_id=message.message_id,
                 agent_id=PERSONAL_ASSISTANT_ID,
             )
@@ -328,8 +330,9 @@ class AgentWorkspaceApp:
                 conversation_id=conversation_id,
                 text=(
                     "[Assistant] Формат команды:\n"
-                    "/python_change_file <repo> <base> <branch> <path> <task>\n"
-                    "Пример: /python_change_file ckripto/telegram-aiteam main codex/readme-update README.md Добавь раздел запуска"
+                    "/python_change_file [repo] <base> <branch> <path> <task>\n"
+                    "Пример: /python_change_file main codex/readme-update README.md Добавь раздел запуска\n"
+                    "Если repo не указан, нужен GITHUB_DEFAULT_REPO."
                 ),
                 reply_to_message_id=message.message_id,
                 agent_id=PERSONAL_ASSISTANT_ID,
@@ -356,7 +359,14 @@ class AgentWorkspaceApp:
             )
             return
 
-        proposal = self.python_developer.propose_file_update(path=path, current_content=file_result.content, task=task)
+        developer_task = self.add_developer_project_context(
+            f"Repository: {repo}\nBase branch: {base}\nTarget branch: {branch}\nRequested change: {task}"
+        )
+        proposal = self.python_developer.propose_file_update(
+            path=path,
+            current_content=file_result.content,
+            task=developer_task,
+        )
         if not proposal.ok or proposal.content is None:
             self.emit_agent_message(
                 chat_id=message.chat_id,
@@ -420,7 +430,7 @@ class AgentWorkspaceApp:
                 chat_id=message.chat_id,
                 request_id=request_id,
                 conversation_id=conversation_id,
-                text="[Assistant] Для мержа нужно прямое указание: /python_merge_pr <repo> <number> CONFIRM",
+                text="[Assistant] Для мержа нужно прямое указание: /python_merge_pr [repo] <number> CONFIRM. Если repo не указан, нужен GITHUB_DEFAULT_REPO.",
                 reply_to_message_id=message.message_id,
                 agent_id=PERSONAL_ASSISTANT_ID,
             )
@@ -464,8 +474,9 @@ class AgentWorkspaceApp:
                 conversation_id=conversation_id,
                 text=(
                     "[Assistant] Формат команды:\n"
-                    "/python_pr <repo> <head> <base> <title>\n"
-                    "Пример: /python_pr ckripto/telegram-aiteam feature-branch main Добавить GitHub skill"
+                    "/python_pr [repo] <head> <base> <title>\n"
+                    "Пример: /python_pr feature-branch main Добавить GitHub skill\n"
+                    "Если repo не указан, нужен GITHUB_DEFAULT_REPO."
                 ),
                 reply_to_message_id=message.message_id,
                 agent_id=PERSONAL_ASSISTANT_ID,
@@ -588,6 +599,7 @@ class AgentWorkspaceApp:
         final_prefix: str = "[Assistant] Senior Python Developer вернул результат:",
     ) -> None:
         task = text.strip() or "Нужно уточнить задачу."
+        task_for_developer = self.add_developer_project_context(task)
         self.emit_agent_message(
             chat_id=chat_id,
             request_id=request_id,
@@ -599,7 +611,7 @@ class AgentWorkspaceApp:
         self.emit_delegation_event(
             from_agent_id=PERSONAL_ASSISTANT_ID,
             to_agent_id=SENIOR_PYTHON_DEVELOPER_ID,
-            task=task,
+            task=task_for_developer,
             request_id=request_id,
             conversation_id=conversation_id,
             chat_id=chat_id,
@@ -608,7 +620,7 @@ class AgentWorkspaceApp:
             chat_id=chat_id,
             request_id=request_id,
             conversation_id=conversation_id,
-            text=f"[Assistant -> Senior Python Developer] {task}",
+            text=f"[Assistant -> Senior Python Developer] {task_for_developer}",
             agent_id=PERSONAL_ASSISTANT_ID,
         )
         self.emit_agent_message(
@@ -618,7 +630,7 @@ class AgentWorkspaceApp:
             text="[Senior Python Developer] Принял задачу. Подготовлю технический ответ.",
             agent_id=SENIOR_PYTHON_DEVELOPER_ID,
         )
-        reply = self.python_developer.respond(task)
+        reply = self.python_developer.respond(task_for_developer)
         self.store.append(
             Event.create(
                 event_type="agent_run_completed",
@@ -1061,42 +1073,88 @@ class AgentWorkspaceApp:
             return "Нужно уточнить задачу."
         return stripped
 
+    def add_developer_project_context(self, task: str) -> str:
+        if not self.config.github_default_repo:
+            return task
+        return (
+            "Default GitHub repository/current project: "
+            f"{self.config.github_default_repo}.\n"
+            "If the user does not name another repository explicitly, treat this repository "
+            "as the current codebase, including the code that powers this agent workspace.\n\n"
+            f"Task: {task}"
+        )
+
     def parse_python_pr_command(self, text: str) -> tuple[str, str, str, str] | None:
-        parts = text.strip().split(maxsplit=4)
-        if len(parts) < 5:
+        full_parts = text.strip().split(maxsplit=4)
+        if len(full_parts) >= 5 and "/" in full_parts[1]:
+            _command, repo, head, base, title = full_parts
+            if not head or not base or not title:
+                return None
+            return repo, head, base, title
+
+        default_repo = self.config.github_default_repo
+        default_parts = text.strip().split(maxsplit=3)
+        if not default_repo or len(default_parts) != 4:
             return None
-        _command, repo, head, base, title = parts
-        if "/" not in repo or not head or not base or not title:
+        _command, head, base, title = default_parts
+        if not head or not base or not title:
             return None
-        return repo, head, base, title
+        return default_repo, head, base, title
 
     def parse_python_file_command(self, text: str) -> tuple[str, str, str] | None:
-        parts = text.strip().split(maxsplit=3)
-        if len(parts) != 4:
+        full_parts = text.strip().split(maxsplit=3)
+        if len(full_parts) == 4 and "/" in full_parts[1]:
+            _command, repo, ref, path = full_parts
+            if not ref or not path:
+                return None
+            return repo, ref, path
+
+        default_repo = self.config.github_default_repo
+        default_parts = text.strip().split(maxsplit=2)
+        if not default_repo or len(default_parts) != 3:
             return None
-        _command, repo, ref, path = parts
-        if "/" not in repo or not ref or not path:
+        _command, ref, path = default_parts
+        if not ref or not path:
             return None
-        return repo, ref, path
+        return default_repo, ref, path
 
     def parse_python_change_file_command(self, text: str) -> tuple[str, str, str, str, str] | None:
-        parts = text.strip().split(maxsplit=5)
-        if len(parts) != 6:
+        full_parts = text.strip().split(maxsplit=5)
+        if len(full_parts) == 6 and "/" in full_parts[1]:
+            _command, repo, base, branch, path, task = full_parts
+            if not base or not branch or not path or not task:
+                return None
+            return repo, base, branch, path, task
+
+        default_repo = self.config.github_default_repo
+        default_parts = text.strip().split(maxsplit=4)
+        if not default_repo or len(default_parts) != 5:
             return None
-        _command, repo, base, branch, path, task = parts
-        if "/" not in repo or not base or not branch or not path or not task:
+        _command, base, branch, path, task = default_parts
+        if not base or not branch or not path or not task:
             return None
-        return repo, base, branch, path, task
+        return default_repo, base, branch, path, task
 
     def parse_python_merge_pr_command(self, text: str) -> tuple[str, int] | None:
-        parts = text.strip().split(maxsplit=3)
-        if len(parts) != 4:
+        full_parts = text.strip().split(maxsplit=3)
+        if len(full_parts) == 4 and "/" in full_parts[1]:
+            _command, repo, number, confirmation = full_parts
+            if confirmation != "CONFIRM":
+                return None
+            try:
+                return repo, int(number)
+            except ValueError:
+                return None
+
+        default_repo = self.config.github_default_repo
+        default_parts = text.strip().split(maxsplit=2)
+        if not default_repo or len(default_parts) != 3:
             return None
-        _command, repo, number, confirmation = parts
-        if "/" not in repo or confirmation != "CONFIRM":
+        _command, number, confirmation = default_parts
+        if confirmation != "CONFIRM":
             return None
         try:
-            return repo, int(number)
+            return default_repo, int(number)
         except ValueError:
             return None
 

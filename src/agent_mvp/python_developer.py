@@ -23,6 +23,8 @@ Interaction rules:
 - be concise enough for Telegram;
 - include assumptions and risks when relevant;
 - do not claim repository or tool access unless provided in the task context;
+- if a task context includes a default GitHub repository, treat it as the current project codebase,
+  including the code that powers this agent workspace;
 - return your result to Assistant, because Assistant is the user-facing coordinator.
 """
 

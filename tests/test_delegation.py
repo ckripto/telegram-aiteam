@@ -12,7 +12,7 @@ from src.agent_mvp.telegram import TelegramMessage
 from src.agent_mvp.weather import WeatherForecast
 
 
-def test_config(database_path: str) -> Config:
+def test_config(database_path: str, github_default_repo: str | None = None) -> Config:
     return Config(
         telegram_bot_token="test",
         telegram_allowed_chat_id=None,
@@ -22,7 +22,7 @@ def test_config(database_path: str) -> Config:
         python_developer_model=None,
         python_developer_base_url="https://api.openai.com/v1",
         github_token=None,
-        github_default_repo=None,
+        github_default_repo=github_default_repo,
         github_api_base_url="https://api.github.com",
         database_path=database_path,
         poll_timeout_seconds=1,
@@ -115,6 +115,59 @@ class DelegationTest(unittest.TestCase):
             self.assertIn("[Weather -> Assistant]", joined)
             self.assertIn("[Assistant] Напоминаю", joined)
             self.assertEqual(weather.calls, ["Saint Petersburg"])
+
+    def test_python_github_commands_use_default_repo_when_omitted(self) -> None:
+        with tempfile.NamedTemporaryFile() as tmp:
+            app = AgentMvpApp(test_config(tmp.name, github_default_repo="ckripto/telegram-aiteam"))
+
+            self.assertEqual(
+                app.parse_python_file_command("/python_file main README.md"),
+                ("ckripto/telegram-aiteam", "main", "README.md"),
+            )
+            self.assertEqual(
+                app.parse_python_pr_command("/python_pr feature main Add GitHub skill"),
+                ("ckripto/telegram-aiteam", "feature", "main", "Add GitHub skill"),
+            )
+            self.assertEqual(
+                app.parse_python_change_file_command(
+                    "/python_change_file main codex/readme-update README.md Add setup instructions"
+                ),
+                (
+                    "ckripto/telegram-aiteam",
+                    "main",
+                    "codex/readme-update",
+                    "README.md",
+                    "Add setup instructions",
+                ),
+            )
+            self.assertEqual(
+                app.parse_python_merge_pr_command("/python_merge_pr 12 CONFIRM"),
+                ("ckripto/telegram-aiteam", 12),
+            )
+
+    def test_python_github_commands_still_accept_explicit_repo(self) -> None:
+        with tempfile.NamedTemporaryFile() as tmp:
+            app = AgentMvpApp(test_config(tmp.name, github_default_repo="ckripto/telegram-aiteam"))
+
+            self.assertEqual(
+                app.parse_python_file_command("/python_file other/project main README.md"),
+                ("other/project", "main", "README.md"),
+            )
+
+    def test_python_github_commands_require_default_repo_when_omitted(self) -> None:
+        with tempfile.NamedTemporaryFile() as tmp:
+            app = AgentMvpApp(test_config(tmp.name))
+
+            self.assertIsNone(app.parse_python_file_command("/python_file main README.md"))
+
+    def test_python_developer_task_includes_default_repo_context(self) -> None:
+        with tempfile.NamedTemporaryFile() as tmp:
+            app = AgentMvpApp(test_config(tmp.name, github_default_repo="ckripto/telegram-aiteam"))
+
+            task = app.add_developer_project_context("Посмотри текущий код")
+
+            self.assertIn("ckripto/telegram-aiteam", task)
+            self.assertIn("current codebase", task)
 
 
 class FakeTelegram:
